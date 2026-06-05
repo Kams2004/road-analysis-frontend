@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const MINIO_BASE = process.env.MINIO_URL || "http://localhost:9100"
+const MINIO_BASE = (process.env.MINIO_URL || "http://localhost:9200").replace(/\/$/, "")
 
 const MIME: Record<string, string> = {
-  mp4:  "video/mp4",
-  webm: "video/webm",
-  avi:  "video/x-msvideo",
-  jpg:  "image/jpeg",
-  jpeg: "image/jpeg",
-  png:  "image/png",
-  gif:  "image/gif",
-  webp: "image/webp",
+  mp4: "video/mp4", webm: "video/webm", avi: "video/x-msvideo",
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+  gif: "image/gif", webp: "image/webp",
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
@@ -33,11 +28,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
       "Cache-Control": "public, max-age=3600",
       "Accept-Ranges": "bytes",
     }
-
     const contentLength = res.headers.get("content-length")
-    const contentRange  = res.headers.get("content-range")
+    const contentRange = res.headers.get("content-range")
     if (contentLength) responseHeaders["Content-Length"] = contentLength
-    if (contentRange)  responseHeaders["Content-Range"]  = contentRange
+    if (contentRange) responseHeaders["Content-Range"] = contentRange
 
     return new NextResponse(res.body, {
       status: contentRange ? 206 : 200,

@@ -8,19 +8,20 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Clock, CheckCircle, XCircle, Eye, Search, Filter, MapPin,
-  ImageIcon, Video, AlertTriangle, ChevronLeft, ChevronRight, Edit2, Save, X,
+  ImageIcon, Video, AlertTriangle, ChevronLeft, ChevronRight, Edit2, Save, X, Maximize, Loader2, Plus,
 } from "lucide-react"
+import { VideoPlayer } from "@/components/video-player"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import {
   fetchDetections, reviewDetection, correctLocation,
-  resolveMinioUrl, type ApiDetection,
+  resolveMinioUrl, fetchRejectionReasons, createRejectionReason,
+  type ApiDetection, type RejectionReason,
 } from "@/lib/api"
 
 const PAGE_SIZE = 15
@@ -57,13 +58,22 @@ export default function ValidationsPage() {
   // Validation form state
   const [label, setLabel]                 = useState("")
   const [severityScore, setSeverityScore] = useState<string>("")
-  const [rejectNote, setRejectNote]       = useState("")
   const [showReject, setShowReject]       = useState(false)
 
   // GPS correction state
   const [editingGps, setEditingGps]   = useState(false)
   const [rawGpsInput, setRawGpsInput] = useState("")
   const [gpsError, setGpsError]       = useState<string | null>(null)
+
+  // Rejection reasons state
+  const [reasons, setReasons]               = useState<RejectionReason[]>([])
+  const [reasonsLoading, setReasonsLoading] = useState(false)
+  const [selectedReasonCode, setSelectedReasonCode] = useState("")
+  const [showAddReason, setShowAddReason]   = useState(false)
+  const [newReasonLabel, setNewReasonLabel] = useState("")
+  const [newReasonDesc, setNewReasonDesc]   = useState("")
+  const [addingReason, setAddingReason]     = useState(false)
+  const [reasonError, setReasonError]       = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -102,12 +112,17 @@ export default function ValidationsPage() {
   function openDetail(d: ApiDetection) {
     setSelected(d)
     setShowReject(false)
-    setRejectNote("")
     setLabel(TYPE_LABELS[d.type]?.[0] ?? "confirmed")
     setSeverityScore(d.type === "pothole" ? "0" : "")
     setEditingGps(false)
     setRawGpsInput(d.raw_gps_text ?? "")
     setGpsError(null)
+    setSelectedReasonCode("")
+    setShowAddReason(false)
+    setNewReasonLabel("")
+    setNewReasonDesc("")
+    setReasonError(null)
+    setReasons([])
   }
 
   function updateLocal(updated: ApiDetection) {
@@ -147,16 +162,42 @@ export default function ValidationsPage() {
   }
 
   async function handleReject() {
-    if (!selected) return
+    if (!selected || !selectedReasonCode) return
+    const reason = reasons.find((r) => r.code === selectedReasonCode)
     setBusy(true)
     try {
-      const updated = await reviewDetection(selected.id, "rejected", { note: rejectNote })
+      const note = reason ? `[${reason.code}] ${reason.label}` : selectedReasonCode
+      const updated = await reviewDetection(selected.id, "rejected", { note })
       updateLocal(updated)
       setSelected(null)
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Rejection failed")
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function handleAddReason() {
+    if (!selected || !newReasonLabel.trim()) return
+    setAddingReason(true)
+    setReasonError(null)
+    const code = newReasonLabel.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")
+    try {
+      const created = await createRejectionReason({
+        detection_type: selected.type,
+        code,
+        label: newReasonLabel.trim(),
+        description: newReasonDesc.trim() || newReasonLabel.trim(),
+      })
+      setReasons((prev) => [...prev, created])
+      setSelectedReasonCode(created.code)
+      setShowAddReason(false)
+      setNewReasonLabel("")
+      setNewReasonDesc("")
+    } catch (e: unknown) {
+      setReasonError(e instanceof Error ? e.message : "Failed to add reason")
+    } finally {
+      setAddingReason(false)
     }
   }
 
@@ -386,8 +427,16 @@ export default function ValidationsPage() {
 
                 {/* Annotated frame */}
                 {resolveMinioUrl(selected.image_url) ? (
-                  <div className="relative aspect-video rounded-lg overflow-hidden bg-muted">
+                  <div className="relative aspect-video rounded-lg overflow-hidden bg-muted group">
                     <Image src={resolveMinioUrl(selected.image_url)!} alt="frame" fill className="object-contain" unoptimized />
+                    {/* Fullscreen button */}
+                    <button
+                      onClick={() => window.open(resolveMinioUrl(selected.image_url)!, "_blank")}
+                      className="absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-lg bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
+                      title="View full screen"
+                    >
+                      <Maximize className="h-4 w-4" />
+                    </button>
                   </div>
                 ) : (
                   <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
@@ -411,8 +460,10 @@ export default function ValidationsPage() {
                     <p className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
                       <Video className="h-3.5 w-3.5" /> Context Clip (±3s)
                     </p>
-                    <video controls className="w-full rounded-lg bg-black max-h-48"
-                      src={resolveMinioUrl(selected.context_clip_url)!} />
+                    <VideoPlayer
+                      src={resolveMinioUrl(selected.context_clip_url)!}
+                      className="w-full max-h-56"
+                    />
                   </div>
                 )}
 
@@ -443,8 +494,9 @@ export default function ValidationsPage() {
                         placeholder="DDMM.MMMM,N,DDDMM.MMMM,E,SSSKMH" />
                       {gpsError && <p className="text-xs text-destructive">{gpsError}</p>}
                       <div className="flex gap-2">
-                        <Button size="sm" disabled={busy || !rawGpsInput} onClick={handleSaveGps}>
-                          <Save className="h-3.5 w-3.5 mr-1" /> Save
+                        <Button size="sm" disabled={busy || !rawGpsInput} onClick={handleSaveGps} className="gap-1.5">
+                          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                          {busy ? "Saving…" : "Save"}
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => { setEditingGps(false); setGpsError(null) }}>
                           <X className="h-3.5 w-3.5 mr-1" /> Cancel
@@ -467,7 +519,7 @@ export default function ValidationsPage() {
                   {selected.subtype && <div><p className="text-xs text-muted-foreground">Subtype</p><p>{selected.subtype}</p></div>}
                   {selected.speed_kmh != null && <div><p className="text-xs text-muted-foreground">Speed</p><p>{selected.speed_kmh} km/h</p></div>}
                   {selected.captured_at && (
-                    <div><p className="text-xs text-muted-foreground">Captured</p><p>{format(new Date(selected.captured_at), "PPpp")}</p></div>
+                    <div><p className="text-xs text-muted-foreground">Captured</p><p>{format(new Date(selected.captured_at + "Z"), "PPpp")}</p></div>
                   )}
                   {selected.location_name && (
                     <div className="sm:col-span-2"><p className="text-xs text-muted-foreground">Location</p><p>{selected.location_name}</p></div>
@@ -522,19 +574,115 @@ export default function ValidationsPage() {
                             <CheckCircle className="mr-2 h-4 w-4" /> Validate
                           </Button>
                           <Button variant="outline" className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
-                            onClick={() => setShowReject(true)}>
+                            onClick={() => {
+                              setShowReject(true)
+                              if (selected && reasons.length === 0) {
+                                setReasonsLoading(true)
+                                fetchRejectionReasons(selected.type)
+                                  .then(setReasons)
+                                  .catch(() => {})
+                                  .finally(() => setReasonsLoading(false))
+                              }
+                            }}>
                             <XCircle className="mr-2 h-4 w-4" /> Reject
                           </Button>
                         </div>
                       </>
                     ) : (
                       <div className="space-y-3">
-                        <Label>Rejection reason (optional)</Label>
-                        <Textarea value={rejectNote} onChange={(e) => setRejectNote(e.target.value)}
-                          placeholder="Describe why this detection is a false positive..." rows={3} />
-                        <div className="flex gap-3">
-                          <Button variant="destructive" className="flex-1" disabled={busy} onClick={handleReject}>
-                            <XCircle className="mr-2 h-4 w-4" /> Confirm Reject
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">Rejection reason <span className="text-destructive">*</span></Label>
+                          <Button
+                            variant="ghost" size="sm"
+                            className="h-7 gap-1 text-xs text-primary"
+                            onClick={() => { setShowAddReason(true); setReasonError(null) }}
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Add new reason
+                          </Button>
+                        </div>
+
+                        {/* Reason grid */}
+                        <div className="grid grid-cols-1 gap-2 max-h-52 overflow-y-auto pr-1">
+                          {reasonsLoading ? (
+                            <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground text-sm">
+                              <Loader2 className="h-4 w-4 animate-spin" /> Loading reasons…
+                            </div>
+                          ) : reasons.length === 0 ? (
+                            <p className="text-sm text-muted-foreground py-4 text-center">No reasons found — add one below</p>
+                          ) : (
+                            reasons.map((r) => (
+                              <button
+                                key={r.code}
+                                onClick={() => setSelectedReasonCode(r.code)}
+                                className={cn(
+                                  "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
+                                  selectedReasonCode === r.code
+                                    ? "border-destructive bg-destructive/10"
+                                    : "border-border bg-muted/30 hover:border-destructive/50 hover:bg-destructive/5"
+                                )}
+                              >
+                                <div className={cn(
+                                  "mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 transition-colors",
+                                  selectedReasonCode === r.code ? "border-destructive bg-destructive" : "border-muted-foreground"
+                                )} />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium leading-tight">
+                                    {r.label}
+                                    {r.is_custom && <span className="ml-1.5 text-xs text-muted-foreground">(custom)</span>}
+                                  </p>
+                                  <p className="mt-0.5 text-xs text-muted-foreground">{r.description}</p>
+                                </div>
+                              </button>
+                            ))
+                          )}
+                        </div>
+
+        {/* Add new reason inline form */}
+                        {showAddReason && (
+                          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+                            <p className="text-xs font-medium text-primary">New custom reason</p>
+                            <div className="space-y-1">
+                              <Input
+                                placeholder="Label e.g. Reflection on wet road"
+                                value={newReasonLabel}
+                                onChange={(e) => setNewReasonLabel(e.target.value)}
+                                className="h-8 text-sm"
+                              />
+                              {newReasonLabel.trim() && (
+                                <p className="text-xs text-muted-foreground pl-1">
+                                  Code: <code className="bg-muted px-1 rounded">
+                                    {newReasonLabel.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}
+                                  </code>
+                                </p>
+                              )}
+                            </div>
+                            <Input
+                              placeholder="Description (optional)"
+                              value={newReasonDesc}
+                              onChange={(e) => setNewReasonDesc(e.target.value)}
+                              className="h-8 text-sm"
+                            />
+                            {reasonError && <p className="text-xs text-destructive">{reasonError}</p>}
+                            <div className="flex gap-2">
+                              <Button size="sm" className="h-7 text-xs gap-1" disabled={addingReason || !newReasonLabel.trim()} onClick={handleAddReason}>
+                                {addingReason ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                                Save & select
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowAddReason(false)}>
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex gap-3 pt-1">
+                          <Button
+                            variant="destructive" className="flex-1"
+                            disabled={busy || !selectedReasonCode}
+                            onClick={handleReject}
+                          >
+                            {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+                            Confirm Reject
                           </Button>
                           <Button variant="outline" className="flex-1" onClick={() => setShowReject(false)}>
                             Cancel
@@ -549,7 +697,7 @@ export default function ValidationsPage() {
                 {selected.review_status !== "pending" && selected.reviewed_at && (
                   <div className="border-t pt-4 text-sm text-muted-foreground space-y-1">
                     <p>Reviewed by <span className="font-medium text-foreground">{selected.reviewed_by}</span></p>
-                    <p>{format(new Date(selected.reviewed_at), "PPpp")}</p>
+                    <p>{format(new Date(selected.reviewed_at + "Z"), "PPpp")}</p>
                     {selected.review_note && <p className="italic">"{selected.review_note}"</p>}
                   </div>
                 )}

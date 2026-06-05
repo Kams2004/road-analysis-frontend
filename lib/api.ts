@@ -31,11 +31,13 @@ export interface DetectionListOut {
 }
 
 export async function fetchDetections(params: {
+  job_id?: string
   review_status?: string
   skip?: number
   limit?: number
 }): Promise<DetectionListOut> {
   const q = new URLSearchParams()
+  if (params.job_id) q.set("job_id", params.job_id)
   if (params.review_status) q.set("review_status", params.review_status)
   if (params.skip !== undefined) q.set("skip", String(params.skip))
   if (params.limit !== undefined) q.set("limit", String(params.limit))
@@ -115,6 +117,52 @@ export async function submitJob(file: File, models: string[]): Promise<JobOut> {
 export async function getJob(jobId: string): Promise<JobOut> {
   const res = await fetch(`${BACKEND}/jobs/${jobId}`, { cache: "no-store" })
   if (!res.ok) throw new Error("Failed to fetch job")
+  return res.json()
+}
+
+export async function fetchJobs(skip = 0, limit = 50): Promise<JobOut[]> {
+  const res = await fetch(`${API_BASE}/jobs/?skip=${skip}&limit=${limit}`, { cache: "no-store" })
+  if (!res.ok) throw new Error("Failed to fetch jobs")
+  return res.json()
+}
+
+export async function deleteJob(jobId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/jobs/${jobId}`, { method: "DELETE" })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || "Failed to delete job")
+  }
+}
+
+export interface RejectionReason {
+  id: string
+  detection_type: string
+  code: string
+  label: string
+  description: string
+  is_custom: boolean
+  created_at: string
+}
+
+export async function fetchRejectionReasons(detection_type?: string): Promise<RejectionReason[]> {
+  const q = detection_type ? `?detection_type=${detection_type}` : ""
+  const res = await fetch(`${API_BASE}/rejection-reasons/${q}`, { cache: "no-store" })
+  if (!res.ok) throw new Error("Failed to fetch rejection reasons")
+  return res.json()
+}
+
+export async function createRejectionReason(body: {
+  detection_type: string; code: string; label: string; description: string
+}): Promise<RejectionReason> {
+  const res = await fetch(`${API_BASE}/rejection-reasons/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || "Failed to create reason")
+  }
   return res.json()
 }
 

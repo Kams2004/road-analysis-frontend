@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect, useRef } from "react"
+import { useState, useCallback, useEffect, useRef, memo } from "react"
 import {
   Upload, FileVideo, ImageIcon, Loader2, CheckCircle2, XCircle, Play, Trash2, Clock,
 } from "lucide-react"
@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { ModelSelector, ModelBadges, AVAILABLE_MODELS } from "@/components/model-selector"
-import { submitJob, getJob, fetchDetections, resolveMinioUrl } from "@/lib/api"
+import { getJob, fetchDetections, resolveMinioUrl } from "@/lib/api"
 import type { JobOut, ApiDetection } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
@@ -20,6 +20,8 @@ const MODEL_MAP: Record<string, string> = {
   traffic_lights: "signs",
   speed_hump: "speedbump",
 }
+
+const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
 
 interface StagedFile {
   id: string
@@ -36,7 +38,11 @@ interface QueueItem {
   selectedModels: string[]
   jobId?: string
   status: JobStatus
+  /** 0-100 for upload XHR progress; then frame-based % once processing */
   progress: number
+  totalFrames: number
+  processedFrames: number
+  detectionCount: number
   error?: string
 }
 
@@ -44,6 +50,7 @@ interface LiveDetection extends ApiDetection {
   _jobId: string
 }
 
+// Poll every 2 s while pending/processing
 const POLL_MS = 2000
 
 export default function UploadPage() {
@@ -55,8 +62,10 @@ export default function UploadPage() {
   const [queue, setQueue] = useState<QueueItem[]>([])
   const [liveResults, setLiveResults] = useState<LiveDetection[]>([])
   const [activeTab, setActiveTab] = useState("upload")
-  const pollTimers = useRef<Map<string, NodeJS.Timeout>>(new Map())
+  const pollTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const seenDetections = useRef<Set<string>>(new Set())
+  // track detection offset per job so we page through all detections
+  const detOffsets = useRef<Map<string, number>>(new Map())
 
   useEffect(() => {
     const timers = pollTimers.current
@@ -66,6 +75,8 @@ export default function UploadPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // ── file staging ──────────────────────────────────────────────────────────
 
   const stageFiles = useCallback((files: FileList | null) => {
     if (!files) return
@@ -92,30 +103,78 @@ export default function UploadPage() {
     e.preventDefault(); setIsDragging(false); stageFiles(e.dataTransfer.files)
   }, [stageFiles])
 
+  // ── XHR upload with real progress ────────────────────────────────────────
+
+  const uploadWithProgress = (
+    file: File,
+    models: string[],
+    onProgress: (pct: number) => void
+  ): Promise<JobOut> =>
+    new Promise((resolve, reject) => {
+      const form = new FormData()
+      form.append("file", file)
+      const q = models.length ? `?models=${models.join(",")}` : ""
+      const xhr = new XMLHttpRequest()
+      xhr.open("POST", `${BACKEND}/jobs/${q}`)
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
+      }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText))
+        } else {
+          try { reject(new Error(JSON.parse(xhr.responseText).detail || `HTTP ${xhr.status}`)) }
+          catch { reject(new Error(`HTTP ${xhr.status}`)) }
+        }
+      }
+      xhr.onerror = () => reject(new Error("Network error"))
+      xhr.send(form)
+    })
+
+  // ── polling ───────────────────────────────────────────────────────────────
+
   const startPolling = useCallback((queueId: string, jobId: string) => {
     if (pollTimers.current.has(queueId)) return
+    detOffsets.current.set(jobId, 0)
 
     const tick = async () => {
       try {
         const job: JobOut = await getJob(jobId)
-        const pct = job.total_frames > 0
-          ? Math.round((job.processed / job.total_frames) * 100)
-          : job.status === "done" ? 100 : 0
+
+        // Calculate % — guard against total_frames=0 during the first few polls
+        let pct = 0
+        if (job.total_frames > 0) {
+          pct = Math.min(99, Math.round((job.processed / job.total_frames) * 100))
+        }
+        if (job.status === "done") pct = 100
 
         setQueue((prev) =>
           prev.map((q) =>
             q.id === queueId
-              ? { ...q, status: job.status as JobStatus, progress: pct, error: job.error ?? undefined }
+              ? {
+                  ...q,
+                  status: job.status as JobStatus,
+                  progress: pct,
+                  totalFrames: job.total_frames,
+                  processedFrames: job.processed,
+                  detectionCount: job.detections,
+                  error: job.error ?? undefined,
+                }
               : q
           )
         )
 
+        // Fetch NEW detections for this job (paginate via offset)
         try {
-          const det = await fetchDetections({ skip: 0, limit: 200 })
-          const fresh = det.items.filter((d) => d.job_id === jobId && !seenDetections.current.has(d.id))
+          const offset = detOffsets.current.get(jobId) ?? 0
+          const det = await fetchDetections({ job_id: jobId, skip: offset, limit: 50 })
+          const fresh = det.items.filter((d) => !seenDetections.current.has(d.id))
           if (fresh.length) {
             fresh.forEach((d) => seenDetections.current.add(d.id))
+            detOffsets.current.set(jobId, offset + fresh.length)
             setLiveResults((prev) => [...fresh.map((d) => ({ ...d, _jobId: jobId })), ...prev])
+            // Switch to results tab when first detection arrives
+            setActiveTab((cur) => cur === "queue" ? "results" : cur)
           }
         } catch { /* non-fatal */ }
 
@@ -123,13 +182,11 @@ export default function UploadPage() {
           pollTimers.current.set(queueId, setTimeout(tick, POLL_MS))
         } else {
           pollTimers.current.delete(queueId)
-          // When job is done, remove its live detections after 5s then clear queue item
-          if (job.status === "done") {
-            setTimeout(() => {
-              setLiveResults((prev) => prev.filter((d) => d._jobId !== jobId))
-            }, 5000)
-          }
-          setTimeout(() => setQueue((prev) => prev.filter((q) => q.id !== queueId)), 5000)
+          // Keep done/failed visible — never auto-remove live results
+          // User clears results manually via "Clear all"
+          setTimeout(() => {
+            setQueue((prev) => prev.filter((q) => q.id !== queueId))
+          }, 15_000)
         }
       } catch (e) {
         setQueue((prev) =>
@@ -139,8 +196,11 @@ export default function UploadPage() {
       }
     }
 
-    pollTimers.current.set(queueId, setTimeout(tick, POLL_MS))
+    // Start first tick immediately
+    tick()
   }, [])
+
+  // ── submit ────────────────────────────────────────────────────────────────
 
   const submitAll = async () => {
     if (staged.length === 0 || selectedModels.length === 0) return
@@ -157,14 +217,25 @@ export default function UploadPage() {
         selectedModels: [...selectedModels],
         status: "uploading",
         progress: 0,
+        totalFrames: 0,
+        processedFrames: 0,
+        detectionCount: 0,
       }
       setQueue((prev) => [...prev, item])
 
       try {
         const backendModels = selectedModels.map((m) => MODEL_MAP[m] ?? m)
-        const job = await submitJob(s.file, backendModels)
+        const job = await uploadWithProgress(s.file, backendModels, (pct) => {
+          setQueue((prev) =>
+            prev.map((q) => q.id === qId ? { ...q, progress: pct } : q)
+          )
+        })
         setQueue((prev) =>
-          prev.map((q) => q.id === qId ? { ...q, jobId: job.id, status: job.status as JobStatus } : q)
+          prev.map((q) =>
+            q.id === qId
+              ? { ...q, jobId: job.id, status: job.status as JobStatus, progress: 0 }
+              : q
+          )
         )
         startPolling(qId, job.id)
       } catch (e) {
@@ -215,7 +286,7 @@ export default function UploadPage() {
               </TabsTrigger>
             </TabsList>
 
-            {/* Upload Tab */}
+            {/* ── Upload Tab ── */}
             <TabsContent value="upload" className="space-y-6">
               <Card>
                 <CardHeader>
@@ -236,9 +307,7 @@ export default function UploadPage() {
                     )}
                   >
                     <input
-                      type="file"
-                      accept="video/*,image/*"
-                      multiple
+                      type="file" accept="video/*,image/*" multiple
                       onChange={(e) => stageFiles(e.target.files)}
                       disabled={selectedModels.length === 0}
                       className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
@@ -257,33 +326,27 @@ export default function UploadPage() {
                         <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => {
                           staged.forEach((s) => URL.revokeObjectURL(s.previewUrl))
                           setStaged([])
-                        }}>
-                          Remove all
-                        </Button>
+                        }}>Remove all</Button>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                         {staged.map((s) => (
                           <div key={s.id} className="group relative rounded-lg border border-border overflow-hidden bg-muted/30">
-                            {s.isImage ? (
+                            {s.isImage
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={s.previewUrl} alt={s.file.name} className="w-full h-40 object-cover" />
-                            ) : (
-                              <video src={s.previewUrl} className="w-full h-40 object-cover" controls preload="metadata" />
-                            )}
+                              ? <img src={s.previewUrl} alt={s.file.name} className="w-full h-40 object-cover" />
+                              : <video src={s.previewUrl} className="w-full h-40 object-cover" controls preload="metadata" />
+                            }
                             <div className="px-3 py-2 flex items-center justify-between gap-2">
                               <p className="text-xs font-medium truncate">{s.file.name}</p>
                               <Button
                                 variant="ghost" size="icon"
                                 className="h-6 w-6 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                                 onClick={() => removeStaged(s.id)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
+                              ><Trash2 className="h-3.5 w-3.5" /></Button>
                             </div>
                           </div>
                         ))}
                       </div>
-
                       <Button className="w-full gap-2" onClick={submitAll} disabled={selectedModels.length === 0}>
                         <Play className="h-4 w-4" />
                         Analyse {staged.length} file{staged.length > 1 ? "s" : ""} with selected models
@@ -294,7 +357,7 @@ export default function UploadPage() {
               </Card>
             </TabsContent>
 
-            {/* Processing Queue Tab */}
+            {/* ── Processing Queue Tab ── */}
             <TabsContent value="queue" className="space-y-4">
               <div>
                 <h2 className="text-lg font-semibold">Processing Queue</h2>
@@ -314,66 +377,19 @@ export default function UploadPage() {
               ) : (
                 <div className="space-y-3">
                   {queue.map((item) => (
-                    <div key={item.id} className="flex items-start gap-4 rounded-lg border border-border bg-muted/30 p-4">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                        <FileVideo className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0 space-y-1.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-medium text-sm truncate">{item.filename}</p>
-                          <StatusBadge status={item.status} />
-                        </div>
-                        <ModelBadges modelIds={item.selectedModels} />
-
-                        {(item.status === "uploading" || item.status === "pending" || item.status === "processing") && (
-                          <div className="pt-1 space-y-1">
-                            {item.status === "uploading" ? (
-                              <div className="h-2 rounded-full bg-primary/20 overflow-hidden">
-                                <div className="h-full w-2/5 bg-primary rounded-full animate-pulse" />
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-3">
-                                <Progress value={item.progress} className="flex-1 h-2" />
-                                <span className="text-sm text-muted-foreground w-10 text-right tabular-nums">
-                                  {item.progress}%
-                                </span>
-                              </div>
-                            )}
-                            <p className="text-xs text-muted-foreground">
-                              {item.status === "uploading" ? "Uploading file…"
-                                : item.status === "pending" ? "Queued — waiting for worker…"
-                                : "AI models processing frames…"}
-                            </p>
-                          </div>
-                        )}
-
-                        {item.status === "failed" && item.error && (
-                          <p className="text-xs text-destructive">{item.error}</p>
-                        )}
-                        {item.status === "done" && (
-                          <p className="text-xs text-muted-foreground">Completed — results saved to database</p>
-                        )}
-                      </div>
-                      <div className="shrink-0 mt-0.5">
-                        {item.status === "uploading" || item.status === "pending" || item.status === "processing"
-                          ? <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                          : item.status === "done"
-                          ? <CheckCircle2 className="h-5 w-5 text-green-500" />
-                          : <XCircle className="h-5 w-5 text-destructive" />}
-                      </div>
-                    </div>
+                    <QueueCard key={item.id} item={item} />
                   ))}
                 </div>
               )}
             </TabsContent>
 
-            {/* Live Results Tab */}
+            {/* ── Live Results Tab ── */}
             <TabsContent value="results" className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">Live Detection Results</h2>
                   <p className="text-sm text-muted-foreground">
-                    Real-time detections as frames are processed — disappear when job completes
+                    Real-time detections as frames are processed — cleared when job finishes
                   </p>
                 </div>
                 {liveResults.length > 0 && (
@@ -381,9 +397,7 @@ export default function UploadPage() {
                     <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
                       {liveResults.length} detected
                     </Badge>
-                    <Button variant="ghost" size="sm" onClick={() => setLiveResults([])}>
-                      Clear all
-                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setLiveResults([])}>Clear all</Button>
                   </div>
                 )}
               </div>
@@ -403,15 +417,12 @@ export default function UploadPage() {
               ) : (
                 <div className="space-y-2">
                   {liveResults.map((det) => (
-                    <div
-                      key={det.id}
-                      className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3"
-                    >
+                    <div key={det.id} className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3">
                       {det.crop_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={resolveMinioUrl(det.crop_url) ?? ""}
-                          alt="detection crop"
+                          alt="crop"
                           className="h-12 w-16 rounded object-cover shrink-0"
                         />
                       ) : (
@@ -433,10 +444,12 @@ export default function UploadPage() {
                           <p className="font-medium">#{det.frame_number}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">GPS</p>
+                          <p className="text-xs text-muted-foreground">Location</p>
                           <p className="font-medium truncate">
-                            {det.latitude != null && det.longitude != null
-                              ? `${det.latitude.toFixed(4)}, ${det.longitude.toFixed(4)}`
+                            {det.location_name
+                              ? det.location_name
+                              : det.latitude != null
+                              ? `${det.latitude.toFixed(4)}, ${det.longitude?.toFixed(4)}`
                               : "—"}
                           </p>
                         </div>
@@ -445,9 +458,7 @@ export default function UploadPage() {
                         variant="ghost" size="icon"
                         className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
                         onClick={() => setLiveResults((prev) => prev.filter((d) => d.id !== det.id))}
-                      >
-                        <XCircle className="h-4 w-4" />
-                      </Button>
+                      ><XCircle className="h-4 w-4" /></Button>
                     </div>
                   ))}
                 </div>
@@ -456,6 +467,18 @@ export default function UploadPage() {
           </Tabs>
         </div>
       </main>
+
+      {/* stripe animation */}
+      <style jsx global>{`
+        @keyframes stripe-move {
+          from { background-position: 0 0; }
+          to   { background-position: 40px 0; }
+        }
+        @keyframes pending-slide {
+          0%   { left: -33%; }
+          100% { left: 100%; }
+        }
+      `}</style>
     </div>
   )
 }
@@ -471,3 +494,91 @@ function StatusBadge({ status }: { status: JobStatus }) {
   const { label, className } = map[status]
   return <Badge variant="outline" className={cn("shrink-0 text-xs", className)}>{label}</Badge>
 }
+
+const QueueCard = memo(function QueueCard({ item }: { item: QueueItem }) {
+  return (
+    <div className="flex items-start gap-4 rounded-lg border border-border bg-muted/30 p-4">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+        <FileVideo className="h-5 w-5 text-primary" />
+      </div>
+      <div className="flex-1 min-w-0 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-medium text-sm truncate">{item.filename}</p>
+          <StatusBadge status={item.status} />
+        </div>
+        <ModelBadges modelIds={item.selectedModels} />
+
+        {item.status === "uploading" && (
+          <div className="space-y-1">
+            <div className="relative h-2 overflow-hidden rounded-full bg-primary/15">
+              <div
+                className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width] duration-300"
+                style={{ width: `${item.progress}%` }}
+              />
+              <div
+                className="absolute inset-0 rounded-full opacity-20"
+                style={{
+                  backgroundImage: "repeating-linear-gradient(45deg, transparent, transparent 6px, rgba(255,255,255,0.6) 6px, rgba(255,255,255,0.6) 12px)",
+                  backgroundSize: "20px 20px",
+                  animation: "stripe-move 1s linear infinite",
+                }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Uploading…</span>
+              <span className="tabular-nums font-medium">{item.progress}%</span>
+            </div>
+          </div>
+        )}
+
+        {item.status === "pending" && (
+          <div className="space-y-1">
+            <div className="h-2 overflow-hidden rounded-full bg-muted relative">
+              <div className="absolute inset-y-0 w-1/3 rounded-full bg-warning/60"
+                style={{ animation: "pending-slide 1.5s ease-in-out infinite" }} />
+            </div>
+            <p className="text-xs text-muted-foreground">Queued — waiting for worker…</p>
+          </div>
+        )}
+
+        {item.status === "processing" && (
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <Progress value={item.progress} className="flex-1 h-2" />
+              <span className="text-xs tabular-nums font-medium w-10 text-right">
+                {item.progress}%
+              </span>
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>
+                {item.processedFrames > 0
+                  ? `${item.processedFrames.toLocaleString()} / ${item.totalFrames.toLocaleString()} frames`
+                  : "AI models processing frames…"}
+              </span>
+              {item.detectionCount > 0 && (
+                <span className="text-primary font-medium">{item.detectionCount} detected</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {item.status === "done" && (
+          <p className="text-xs text-muted-foreground">
+            Completed · {item.detectionCount} detection{item.detectionCount !== 1 ? "s" : ""} saved to database
+          </p>
+        )}
+        {item.status === "failed" && item.error && (
+          <p className="text-xs text-destructive">{item.error}</p>
+        )}
+      </div>
+
+      <div className="shrink-0 mt-0.5">
+        {item.status === "uploading" || item.status === "pending" || item.status === "processing"
+          ? <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          : item.status === "done"
+          ? <CheckCircle2 className="h-5 w-5 text-green-500" />
+          : <XCircle className="h-5 w-5 text-destructive" />}
+      </div>
+    </div>
+  )
+})
