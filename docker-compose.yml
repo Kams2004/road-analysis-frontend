@@ -1,0 +1,10 @@
+services:
+  frontend:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_API_URL: http://100.42.183.79:8080
+    env_file: .env.production
+    ports:
+      - "3001:3001"
+    restart: unless-stopped
