@@ -166,6 +166,77 @@ export async function createRejectionReason(body: {
   return res.json()
 }
 
+// ─── Signalements ─────────────────────────────────────────────────────────────
+
+export type SignalementType =
+  | "embouteillage" | "police" | "accident" | "danger"
+  | "route_fermee" | "voie_bloquee" | "probleme_de_carte"
+  | "mauvais_temps" | "prix_carburant" | "assistance_route" | "debogage"
+
+export type SignalementStatus = "actif" | "annule" | "rejete"
+
+export interface ApiSignalement {
+  id: string
+  type: SignalementType
+  status: SignalementStatus
+  latitude: number
+  longitude: number
+  description: string | null
+  image_url: string | null
+  reported_by: string | null
+  moderated_by: string | null
+  moderated_at: string | null
+  moderation_note: string | null
+  reported_at: string
+}
+
+export interface SignalementListOut {
+  total: number
+  items: ApiSignalement[]
+}
+
+export async function fetchSignalements(params: {
+  status?: SignalementStatus | "all"
+  type?: SignalementType | "all"
+  skip?: number
+  limit?: number
+}): Promise<SignalementListOut> {
+  const q = new URLSearchParams()
+  if (params.status && params.status !== "all") q.set("status", params.status)
+  if (params.type   && params.type   !== "all") q.set("type",   params.type)
+  if (params.skip  !== undefined) q.set("skip",  String(params.skip))
+  if (params.limit !== undefined) q.set("limit", String(params.limit))
+  const res = await fetch(`${API_BASE}/signalements/?${q}`, { cache: "no-store" })
+  if (!res.ok) throw new Error("Failed to fetch signalements")
+  return res.json()
+}
+
+export async function moderateSignalement(
+  id: string,
+  status: "annule" | "rejete",
+  moderated_by: string,
+  note?: string,
+): Promise<ApiSignalement> {
+  const res = await fetch(`${API_BASE}/signalements/${id}/moderate`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, moderated_by, note }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || "Failed to moderate signalement")
+  }
+  return res.json()
+}
+
+export async function deleteSignalement(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/signalements/${id}`, { method: "DELETE" })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || "Failed to delete signalement")
+  }
+}
+
 /** Convert minio:9000/bucket/path → /api/media/bucket/path */
 export function resolveMinioUrl(url: string | null): string | null {
   if (!url) return null

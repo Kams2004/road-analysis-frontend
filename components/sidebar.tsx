@@ -18,6 +18,8 @@ import {
   Moon,
   Briefcase,
   Map,
+  Navigation,
+  MessageSquareWarning,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -30,6 +32,8 @@ const navigation = [
   { name: "Detections", href: "/detections", icon: AlertTriangle },
   { name: "Validations", href: "/validations", icon: CheckCircle },
   { name: "Map", href: "/map", icon: Map },
+  { name: "Navigate", href: "/navigate", icon: Navigation },
+  { name: "Signalements", href: "/signalements", icon: MessageSquareWarning },
   { name: "Settings", href: "/settings", icon: Settings },
 ]
 
