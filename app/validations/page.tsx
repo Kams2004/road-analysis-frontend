@@ -34,10 +34,11 @@ const TYPE_LABELS: Record<string, string[]> = {
   default:      ["confirmed"],
 }
 
-const statusColors = {
+const statusColors: Record<string, string> = {
   pending:   "bg-warning/20 text-warning border-warning/30",
   validated: "bg-success/20 text-success border-success/30",
   rejected:  "bg-destructive/20 text-destructive border-destructive/30",
+  resolved:  "bg-blue-500/20 text-blue-500 border-blue-500/30",
 }
 
 export default function ValidationsPage() {

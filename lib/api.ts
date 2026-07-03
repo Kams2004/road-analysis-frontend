@@ -18,10 +18,11 @@ export interface ApiDetection {
   context_clip_url: string | null
   location_name: string | null
   rpm: number | null
-  review_status: "pending" | "validated" | "rejected"
+  review_status: "pending" | "validated" | "rejected" | "resolved"
   reviewed_by: string | null
   reviewed_at: string | null
   review_note: string | null
+  resolved_at: string | null
   created_at: string
 }
 
@@ -235,6 +236,85 @@ export async function deleteSignalement(id: string): Promise<void> {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.detail || "Failed to delete signalement")
   }
+}
+
+// ─── Cluster config ──────────────────────────────────────────────────────────
+
+export interface ClusterConfig {
+  radius_m: number
+}
+
+export async function fetchClusterConfig(): Promise<ClusterConfig> {
+  const res = await fetch(`${API_BASE}/cluster-config/`, { cache: "no-store" })
+  if (!res.ok) throw new Error("Failed to fetch cluster config")
+  return res.json()
+}
+
+export async function saveClusterConfig(radius_m: number): Promise<ClusterConfig> {
+  const res = await fetch(`${API_BASE}/cluster-config/`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ radius_m }),
+  })
+  if (!res.ok) throw new Error("Failed to save cluster config")
+  return res.json()
+}
+
+// ─── Clusters ─────────────────────────────────────────────────────────────────
+
+export interface ClusterOut {
+  cluster_id: number
+  centroid_lat: number
+  centroid_lon: number
+  count: number
+  resolved_count: number
+  is_resolved: boolean
+  detection_ids: string[]
+}
+
+export interface ClusteredDetectionsOut {
+  radius_m: number
+  total_detections: number
+  total_clusters: number
+  active_clusters: number
+  resolved_clusters: number
+  clusters: ClusterOut[]
+}
+
+export async function fetchClusters(params: {
+  type?: string
+  subtype?: string
+  job_id?: string
+} = {}): Promise<ClusteredDetectionsOut> {
+  const body: Record<string, string> = {}
+  if (params.type)    body.type    = params.type
+  if (params.subtype) body.subtype = params.subtype
+  if (params.job_id)  body.job_id  = params.job_id
+  const res = await fetch(`${API_BASE}/detections/clusters`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  })
+  if (!res.ok) throw new Error("Failed to fetch clusters")
+  return res.json()
+}
+
+export async function resolveCluster(
+  detection_ids: string[],
+  new_detection_count: number,
+  resolved_by?: string,
+): Promise<DetectionListOut> {
+  const res = await fetch(`${API_BASE}/detections/clusters/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ detection_ids, new_detection_count, resolved_by }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.detail || "Failed to resolve cluster")
+  }
+  return res.json()
 }
 
 /** Convert minio:9000/bucket/path → /api/media/bucket/path */

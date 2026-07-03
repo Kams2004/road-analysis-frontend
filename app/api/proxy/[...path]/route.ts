@@ -61,6 +61,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pat
   }
 }
 
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
+  const { path } = await params
+  const body = await req.text()
+  try {
+    const res = await fetch(`${API_BASE}/${path.join("/")}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body,
+    })
+    const data = await res.json()
+    return NextResponse.json(data, { status: res.status })
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 502 })
+  }
+}
+
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params
   try {

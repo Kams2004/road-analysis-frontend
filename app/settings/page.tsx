@@ -1,3 +1,6 @@
+"use client"
+
+import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -21,9 +24,32 @@ import {
   Database,
   Cpu,
   Globe,
+  Layers,
 } from "lucide-react"
+import { fetchClusterConfig, saveClusterConfig } from "@/lib/api"
 
 export default function SettingsPage() {
+  const [clusterRadius, setClusterRadius] = useState<number>(50)
+  const [clusterSaving, setClusterSaving] = useState(false)
+  const [clusterSaved, setClusterSaved]   = useState(false)
+
+  useEffect(() => {
+    fetchClusterConfig()
+      .then((c) => setClusterRadius(c.radius_m))
+      .catch(() => {})
+  }, [])
+
+  const handleSaveCluster = async () => {
+    setClusterSaving(true)
+    setClusterSaved(false)
+    try {
+      const res = await saveClusterConfig(clusterRadius)
+      setClusterRadius(res.radius_m)
+      setClusterSaved(true)
+      setTimeout(() => setClusterSaved(false), 2500)
+    } catch { /* ignore */ }
+    finally { setClusterSaving(false) }
+  }
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
@@ -251,6 +277,59 @@ export default function SettingsPage() {
                       Export
                     </Button>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Cluster Configuration */}
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-primary" />
+                  <CardTitle className="text-base">Cluster Configuration</CardTitle>
+                </div>
+                <CardDescription>
+                  Define the radius used to group nearby detections into clusters on the map
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Cluster Radius</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={5000}
+                        value={clusterRadius}
+                        onChange={(e) => setClusterRadius(Number(e.target.value))}
+                        className="w-24 h-8 text-sm text-right"
+                      />
+                      <span className="text-sm text-muted-foreground">m</span>
+                    </div>
+                  </div>
+                  <Slider
+                    min={10}
+                    max={1000}
+                    step={10}
+                    value={[clusterRadius]}
+                    onValueChange={([v]) => setClusterRadius(v)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Two validated detections within this distance will be grouped into the same cluster.
+                    Isolated detections form singleton clusters.
+                  </p>
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  {clusterSaved && (
+                    <Badge variant="outline" className="text-xs bg-success/10 text-success border-success/30">
+                      Saved
+                    </Badge>
+                  )}
+                  {!clusterSaved && <span />}
+                  <Button size="sm" onClick={handleSaveCluster} disabled={clusterSaving}>
+                    {clusterSaving ? "Saving…" : "Save Radius"}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
