@@ -270,6 +270,7 @@ export interface ClusterOut {
   resolved_count: number
   is_resolved: boolean
   detection_ids: string[]
+  detection_coords: [number, number][]  // [lat, lon][]
 }
 
 export interface ClusteredDetectionsOut {

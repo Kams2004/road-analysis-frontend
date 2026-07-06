@@ -20,9 +20,26 @@ interface DetectionMapProps {
   onDetectionClick?:         (d: ApiDetection) => void
 }
 
+function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6_371_000
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+// Radius based on actual spread of detections from centroid, min 80m
+function clusterDisplayRadius(c: ClusterOut): number {
+  const coords = c.detection_coords ?? []
+  if (coords.length === 0) return 80
+  const maxDist = Math.max(...coords.map(([lat, lon]) =>
+    haversineM(c.centroid_lat, c.centroid_lon, lat, lon)
+  ))
+  return Math.max(maxDist * 1.3, 80)
+}
+
 export default function DetectionMap({
   clusters,
-  radiusM = 500,
   onClusterClick,
   selectedCluster,
   expandedDetections = [],
@@ -62,11 +79,10 @@ export default function DetectionMap({
       clusters.forEach((c) => {
         const isSelected = selectedCluster?.cluster_id === c.cluster_id
         const color = c.is_resolved ? "#22c55e" : isSelected ? "#6366f1" : "#f97316"
+        const radius = clusterDisplayRadius(c)
 
-        // Geographic boundary circle — scales with zoom so detections always stay inside
-        const displayRadius = Number.isFinite(c.radius_m) && c.radius_m > 0 ? Math.max(c.radius_m, radiusM) : radiusM
         const boundary = L.circle([c.centroid_lat, c.centroid_lon], {
-          radius: displayRadius,
+          radius,
           color,
           weight: isSelected ? 3 : 2,
           dashArray: "8 6",
@@ -80,12 +96,10 @@ export default function DetectionMap({
         )
         boundary.on("click", () => onClusterClick(c))
 
-        // Badge pinned at centroid — small fixed-pixel pill, always on top
         L.marker([c.centroid_lat, c.centroid_lon], {
           icon: L.divIcon({
             className: "",
-            html: `<div style="
-              background:${color};color:#fff;font-weight:700;font-size:12px;
+            html: `<div style="background:${color};color:#fff;font-weight:700;font-size:12px;
               border:2px solid #fff;border-radius:12px;padding:2px 8px;
               box-shadow:0 2px 6px rgba(0,0,0,0.35);white-space:nowrap;
               pointer-events:none;">${c.count}</div>`,
@@ -117,15 +131,14 @@ export default function DetectionMap({
         if (onDetectionClick) m.on("click", () => onDetectionClick(det))
       })
 
-      // fit bounds — include circle extents so clusters aren't tiny dots
-      const bounds = clusters.reduce((b, c) => {
-        const displayRadius = Number.isFinite(c.radius_m) && c.radius_m > 0 ? Math.max(c.radius_m, radiusM) : radiusM
-        return b.extend(L.circle([c.centroid_lat, c.centroid_lon], { radius: displayRadius }).getBounds())
+      // fit bounds using actual circle extents
+      const boundsArr = clusters.reduce((b, c) => {
+        return b.extend(L.circle([c.centroid_lat, c.centroid_lon], { radius: clusterDisplayRadius(c) }).getBounds())
       }, L.latLngBounds([] as [number, number][]))
-      if (bounds.isValid()) map.fitBounds(bounds, { padding: [48, 48] })
+      if (boundsArr.isValid()) map.fitBounds(boundsArr, { padding: [48, 48] })
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clusters, selectedCluster, expandedDetections, radiusM])
+  }, [clusters, selectedCluster, expandedDetections])
 
   return (
     <>
