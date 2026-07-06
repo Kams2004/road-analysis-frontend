@@ -64,7 +64,7 @@ export default function DetectionMap({
         const color = c.is_resolved ? "#22c55e" : isSelected ? "#6366f1" : "#f97316"
 
         // Geographic boundary circle — scales with zoom so detections always stay inside
-        const displayRadius = Math.max(c.radius_m, radiusM)
+        const displayRadius = Number.isFinite(c.radius_m) && c.radius_m > 0 ? Math.max(c.radius_m, radiusM) : radiusM
         const boundary = L.circle([c.centroid_lat, c.centroid_lon], {
           radius: displayRadius,
           color,
@@ -119,7 +119,7 @@ export default function DetectionMap({
 
       // fit bounds — include circle extents so clusters aren't tiny dots
       const bounds = clusters.reduce((b, c) => {
-        const displayRadius = Math.max(c.radius_m, radiusM)
+        const displayRadius = Number.isFinite(c.radius_m) && c.radius_m > 0 ? Math.max(c.radius_m, radiusM) : radiusM
         return b.extend(L.circle([c.centroid_lat, c.centroid_lon], { radius: displayRadius }).getBounds())
       }, L.latLngBounds([] as [number, number][]))
       if (bounds.isValid()) map.fitBounds(bounds, { padding: [48, 48] })
