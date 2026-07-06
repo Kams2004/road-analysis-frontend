@@ -173,6 +173,7 @@ export default function MapPage() {
 
             <DetectionMap
               clusters={clusterData?.clusters ?? []}
+              radiusM={clusterData?.radius_m}
               onClusterClick={handleClusterClick}
               selectedCluster={selectedCluster}
               expandedDetections={clusterDetections}

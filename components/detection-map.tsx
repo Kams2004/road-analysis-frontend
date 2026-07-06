@@ -13,6 +13,7 @@ const TYPE_COLORS: Record<string, string> = {
 
 interface DetectionMapProps {
   clusters:                  ClusterOut[]
+  radiusM?:                  number
   onClusterClick:            (c: ClusterOut) => void
   selectedCluster?:          ClusterOut | null
   expandedDetections?:       ApiDetection[]
@@ -21,6 +22,7 @@ interface DetectionMapProps {
 
 export default function DetectionMap({
   clusters,
+  radiusM = 500,
   onClusterClick,
   selectedCluster,
   expandedDetections = [],
@@ -52,7 +54,7 @@ export default function DetectionMap({
     import("leaflet").then((L) => {
       const map = mapRef.current!
       map.eachLayer((l) => {
-        if (l instanceof L.Marker || l instanceof L.CircleMarker) map.removeLayer(l)
+        if (l instanceof L.Marker || l instanceof L.CircleMarker || l instanceof L.Circle || l instanceof L.Polygon) map.removeLayer(l)
       })
 
       if (clusters.length === 0) return
@@ -60,29 +62,37 @@ export default function DetectionMap({
       clusters.forEach((c) => {
         const isSelected = selectedCluster?.cluster_id === c.cluster_id
         const color = c.is_resolved ? "#22c55e" : isSelected ? "#6366f1" : "#f97316"
-        const r     = Math.max(18, Math.min(50, 14 + c.count * 3))
 
-        const circle = L.circleMarker([c.centroid_lat, c.centroid_lon], {
-          radius: r, fillColor: color, fillOpacity: 0.88,
-          color: "#fff", weight: isSelected ? 3 : 2,
+        // Geographic boundary circle — scales with zoom so detections always stay inside
+        const boundary = L.circle([c.centroid_lat, c.centroid_lon], {
+          radius: radiusM,
+          color,
+          weight: isSelected ? 3 : 2,
+          dashArray: "8 6",
+          fillColor: color,
+          fillOpacity: 0.08,
         }).addTo(map)
 
-        circle.bindTooltip(
+        boundary.bindTooltip(
           `${c.is_resolved ? "✓ Resolved" : "Active"} · ${c.count} detection${c.count !== 1 ? "s" : ""}`,
           { permanent: false, direction: "top" },
         )
-        circle.on("click", () => onClusterClick(c))
+        boundary.on("click", () => onClusterClick(c))
 
-        // count label (non-interactive marker on top)
+        // Badge pinned at centroid — small fixed-pixel pill, always on top
         L.marker([c.centroid_lat, c.centroid_lon], {
           icon: L.divIcon({
             className: "",
-            html: `<div style="width:${r*2}px;height:${r*2}px;display:flex;align-items:center;
-              justify-content:center;font-size:${r>28?13:11}px;font-weight:700;
-              color:#fff;pointer-events:none;">${c.count}</div>`,
-            iconSize: [r * 2, r * 2], iconAnchor: [r, r],
+            html: `<div style="
+              background:${color};color:#fff;font-weight:700;font-size:12px;
+              border:2px solid #fff;border-radius:12px;padding:2px 8px;
+              box-shadow:0 2px 6px rgba(0,0,0,0.35);white-space:nowrap;
+              pointer-events:none;">${c.count}</div>`,
+            iconSize: [40, 24],
+            iconAnchor: [20, 12],
           }),
           interactive: false,
+          zIndexOffset: 1000,
         }).addTo(map)
       })
 
@@ -112,7 +122,7 @@ export default function DetectionMap({
       else if (pts.length === 1) map.setView(pts[0], 14)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clusters, selectedCluster, expandedDetections])
+  }, [clusters, selectedCluster, expandedDetections, radiusM])
 
   return (
     <>
