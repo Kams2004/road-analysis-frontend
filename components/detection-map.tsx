@@ -64,8 +64,9 @@ export default function DetectionMap({
         const color = c.is_resolved ? "#22c55e" : isSelected ? "#6366f1" : "#f97316"
 
         // Geographic boundary circle — scales with zoom so detections always stay inside
+        const displayRadius = Math.max(c.radius_m, radiusM)
         const boundary = L.circle([c.centroid_lat, c.centroid_lon], {
-          radius: c.radius_m,
+          radius: displayRadius,
           color,
           weight: isSelected ? 3 : 2,
           dashArray: "8 6",
@@ -116,10 +117,12 @@ export default function DetectionMap({
         if (onDetectionClick) m.on("click", () => onDetectionClick(det))
       })
 
-      // fit bounds
-      const pts = clusters.map((c) => [c.centroid_lat, c.centroid_lon] as [number, number])
-      if (pts.length > 1) map.fitBounds(L.latLngBounds(pts), { padding: [48, 48] })
-      else if (pts.length === 1) map.setView(pts[0], 14)
+      // fit bounds — include circle extents so clusters aren't tiny dots
+      const bounds = clusters.reduce((b, c) => {
+        const displayRadius = Math.max(c.radius_m, radiusM)
+        return b.extend(L.circle([c.centroid_lat, c.centroid_lon], { radius: displayRadius }).getBounds())
+      }, L.latLngBounds([] as [number, number][]))
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [48, 48] })
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clusters, selectedCluster, expandedDetections, radiusM])
