@@ -65,7 +65,7 @@ export default function DetectionMap({
 
         // Geographic boundary circle — scales with zoom so detections always stay inside
         const boundary = L.circle([c.centroid_lat, c.centroid_lon], {
-          radius: radiusM,
+          radius: c.radius_m,
           color,
           weight: isSelected ? 3 : 2,
           dashArray: "8 6",
