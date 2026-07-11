@@ -21,7 +21,7 @@ const MODEL_MAP: Record<string, string> = {
   speed_hump: "speedbump",
 }
 
-const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"
+const BACKEND = "/api/proxy"
 
 interface StagedFile {
   id: string
