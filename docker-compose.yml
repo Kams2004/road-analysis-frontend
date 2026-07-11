@@ -5,6 +5,5 @@ services:
       args:
         NEXT_PUBLIC_API_URL: http://185.182.184.188:8080
     env_file: .env.production
-    ports:
-      - "3001:3001"
+    network_mode: host
     restart: unless-stopped
