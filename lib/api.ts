@@ -96,18 +96,11 @@ export interface JobOut {
   finished_at: string | null
 }
 
-// File uploads go directly to the FastAPI backend from the browser.
-// The Next.js /api/proxy route has a ~4 MB body limit and cannot handle large videos.
-// NEXT_PUBLIC_API_URL is injected at build time; falls back to localhost:8080 for dev.
-const BACKEND = (typeof window !== "undefined"
-  ? (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080")
-  : "http://localhost:8080")
-
 export async function submitJob(file: File, models: string[]): Promise<JobOut> {
   const form = new FormData()
   form.append("file", file)
   const q = models.length ? `?models=${models.join(",")}` : ""
-  const res = await fetch(`${BACKEND}/jobs/${q}`, { method: "POST", body: form })
+  const res = await fetch(`${API_BASE}/jobs/${q}`, { method: "POST", body: form })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.detail || "Failed to submit job")
@@ -116,7 +109,7 @@ export async function submitJob(file: File, models: string[]): Promise<JobOut> {
 }
 
 export async function getJob(jobId: string): Promise<JobOut> {
-  const res = await fetch(`${BACKEND}/jobs/${jobId}`, { cache: "no-store" })
+  const res = await fetch(`${API_BASE}/jobs/${jobId}`, { cache: "no-store" })
   if (!res.ok) throw new Error("Failed to fetch job")
   return res.json()
 }
