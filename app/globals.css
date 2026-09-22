@@ -30,15 +30,24 @@
   --chart-4: oklch(0.55 0.22 25);
   --chart-5: oklch(0.55 0.12 300);
   --radius: 0.625rem;
-  --sidebar: oklch(0.98 0.005 250);
-  --sidebar-foreground: oklch(0.15 0.015 250);
-  --sidebar-primary: oklch(0.50 0.18 250);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.94 0.01 250);
-  --sidebar-accent-foreground: oklch(0.15 0.015 250);
-  --sidebar-border: oklch(0.90 0.008 250);
-  --sidebar-ring: oklch(0.50 0.18 250);
-  
+
+  /* Brand sidebar — deep navy with an azure-blue accent, same in light and
+     dark mode (declared once here, not repeated under .dark) so the rail
+     always reads as VIASafe regardless of the content theme, instead of
+     fading to near-white in light mode. */
+  --sidebar: oklch(0.20 0.06 258);
+  --sidebar-foreground: oklch(0.95 0.01 250);
+  --sidebar-primary: oklch(0.62 0.17 231);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.27 0.07 258);
+  --sidebar-accent-foreground: oklch(0.98 0.01 250);
+  --sidebar-border: oklch(0.30 0.05 258);
+  --sidebar-ring: oklch(0.62 0.17 231);
+  /* A hotter red than --destructive, tuned to pop on the navy rail rather
+     than a light card — used only for genuine "needs attention" counts
+     (e.g. pending validations), never as pure decoration. */
+  --sidebar-danger: oklch(0.63 0.21 25);
+
   /* Custom colors for risk levels */
   --warning: oklch(0.75 0.15 70);
   --warning-foreground: oklch(0.20 0 0);
@@ -74,15 +83,9 @@
   --chart-3: oklch(0.70 0.16 45);
   --chart-4: oklch(0.60 0.20 25);
   --chart-5: oklch(0.65 0.12 300);
-  --sidebar: oklch(0.14 0.015 250);
-  --sidebar-foreground: oklch(0.94 0.005 250);
-  --sidebar-primary: oklch(0.65 0.16 250);
-  --sidebar-primary-foreground: oklch(0.12 0 0);
-  --sidebar-accent: oklch(0.22 0.015 250);
-  --sidebar-accent-foreground: oklch(0.94 0.005 250);
-  --sidebar-border: oklch(0.26 0.015 250);
-  --sidebar-ring: oklch(0.65 0.16 250);
-  
+  /* --sidebar* intentionally NOT redefined here — the brand navy rail from
+     :root stays constant in dark mode too; only the content area retheme. */
+
   --warning: oklch(0.78 0.15 70);
   --warning-foreground: oklch(0.15 0 0);
   --success: oklch(0.65 0.14 160);
@@ -130,6 +133,7 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-danger: var(--sidebar-danger);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-success: var(--success);

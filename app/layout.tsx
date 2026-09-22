@@ -7,8 +7,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'RoadGuard AI - Road Risk Analysis Platform',
-  description: 'AI-powered road hazard detection and risk analysis platform',
+  title: 'VIASafe Admin — Road Risk & Collision Prevention Platform',
+  description: 'Admin console for the VIASafe road hazard detection and collision prevention platform',
   generator: 'v0.app',
   icons: {
     icon: [

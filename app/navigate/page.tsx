@@ -100,7 +100,7 @@ export default function LocationPermissionPage() {
         Allow Location Access
       </h1>
       <p className="text-muted-foreground text-center text-sm max-w-xs leading-relaxed mb-2">
-        RoadGuard needs your location to show you on the map and help you navigate to your destination.
+        VIASafe needs your location to show you on the map and help you navigate to your destination.
       </p>
 
       {denied && (
