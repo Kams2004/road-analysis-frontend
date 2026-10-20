@@ -236,6 +236,7 @@ export interface SftpLog {
   link_state: SftpLinkState
   link_message: string | null
   link_at: string | null
+  link_held?: boolean
   last_seq: number
   lines: SftpLogLine[]
 }

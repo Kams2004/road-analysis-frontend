@@ -319,6 +319,8 @@ export interface SftpInfo {
   link_state: SftpLinkState
   link_message: string | null
   link_at: string | null
+  /** Disconnected by the user: browsing does not reconnect until Connect. */
+  link_held?: boolean
 }
 
 export interface CloudFolder { id: string; name: string; path?: string | null; has_children?: boolean | null }

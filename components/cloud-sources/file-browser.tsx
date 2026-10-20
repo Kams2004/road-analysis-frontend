@@ -20,12 +20,12 @@ import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { errorText } from "@/lib/auth-api"
+import { ApiError, errorText } from "@/lib/auth-api"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
 import { formatDuration } from "@/lib/module7-api"
 import {
-  browseDrive, formatBytes, thumbnailUrl,
+  browseDrive, connectSftp, formatBytes, thumbnailUrl,
   type CloudConnection, type CloudProviderInfo, type Crumb, type DriveEntry, type ImportBatch,
 } from "@/lib/cloud-sources-api"
 import { ProviderIcon } from "./provider-icon"
@@ -63,6 +63,11 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // SFTP server disconnected on purpose: no listing (it would reconnect) until Connect.
+  const held = connection.provider === "sftp" && !!connection.sftp?.link_held
+  const [heldByServer, setHeldByServer] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
+  const isHeld = held || heldByServer
   const [view, setView] = useState<View>("list")
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "name", dir: 1 })
   const [selFiles, setSelFiles] = useState<Map<string, DriveEntry>>(new Map())
@@ -91,8 +96,15 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
     return () => clearTimeout(id)
   }, [query])
 
+  // Connect clicked on the server card (new link state) → listing allowed again.
+  useEffect(() => { if (!held) setHeldByServer(false) }, [held, connection.sftp?.link_state, connection.sftp?.link_at])
+
   const load = useCallback(async () => {
     abortRef.current?.abort()
+    if (isHeld) {
+      setFolders([]); setFiles([]); setNextToken(null); setLoading(false); setError(null)
+      return
+    }
     const ctrl = new AbortController()
     abortRef.current = ctrl
     setLoading(true)
@@ -111,15 +123,29 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
       setAnchor(null)
     } catch (e) {
       if ((e as Error)?.name === "AbortError") return
-      setError(errorText(t, e, S))
       setFolders([]); setFiles([]); setNextToken(null)
+      if (e instanceof ApiError && e.detail.code === "sftp_disconnected") { setHeldByServer(true); return }
+      setError(errorText(t, e, S))
     } finally {
       if (!ctrl.signal.aborted) setLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connection.id, folderId, appliedQuery, t])
+  }, [connection.id, folderId, appliedQuery, t, isHeld])
 
   useEffect(() => { load() }, [load, reloadKey])
+
+  const reconnect = async () => {
+    setReconnecting(true)
+    try {
+      await connectSftp(connection.id)
+      setHeldByServer(false)
+      setReloadKey((k) => k + 1)
+    } catch (e) {
+      setError(errorText(t, e, S))
+    } finally {
+      setReconnecting(false)
+    }
+  }
 
   const loadMore = async () => {
     if (!nextToken) return
@@ -305,7 +331,15 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
       <div ref={listRef} tabIndex={0} onKeyDown={onKeyDown} aria-label={t(`${S}.files`)}
         className="relative flex-1 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40"
         style={{ maxHeight: "62vh" }}>
-        {error ? (
+        {isHeld ? (
+          <div className="flex h-60 flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
+            <p>{t(`${S}.sftp.heldBrowse`)}</p>
+            <Button size="sm" onClick={reconnect} disabled={reconnecting}>
+              {reconnecting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{t(`${S}.sftp.connect`)}
+            </Button>
+            {error && <Alert variant="destructive" className="text-left"><AlertDescription>{error}</AlertDescription></Alert>}
+          </div>
+        ) : error ? (
           <div className="p-4"><Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert></div>
         ) : loading && rows.length === 0 ? (
           <div className="flex h-60 items-center justify-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin" /></div>
