@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from "react"
 import { Play, Pause, Volume2, VolumeX, Maximize } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useT } from "@/lib/i18n"
 
 interface VideoPlayerProps {
   src: string
@@ -18,6 +19,7 @@ export function VideoPlayer({ src, className }: VideoPlayerProps) {
   const [duration, setDuration] = useState(0)
   const [current, setCurrent]   = useState(0)
   const [showControls, setShowControls] = useState(true)
+  const t = useT()
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const scheduleHide = useCallback(() => {
@@ -108,7 +110,7 @@ export function VideoPlayer({ src, className }: VideoPlayerProps) {
           "absolute inset-0 flex items-center justify-center transition-opacity duration-200",
           showControls || !playing ? "opacity-100" : "opacity-0"
         )}
-        aria-label={playing ? "Pause" : "Play"}
+        aria-label={playing ? t("ops.player.pause") : t("ops.player.play")}
       >
         <div className={cn(
           "flex h-16 w-16 items-center justify-center rounded-full bg-black/50 backdrop-blur-sm border border-white/20 transition-all duration-150",

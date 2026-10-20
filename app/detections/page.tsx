@@ -1,340 +1,418 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import Image from "next/image"
-import { Sidebar } from "@/components/sidebar"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+/**
+ * Hazard Track (Module 6, RRAP-06-001…06-004, 06-009…06-011, 06-019).
+ *
+ * Hazards are detected and grouped automatically: every accepted detection
+ * joins the nearest cluster (hazard) of its type, or opens one — no path to
+ * draw. The page is an explorer with a clear hierarchy
+ *
+ *   Clusters (list + overview map) › Cluster (detail pane) › Detections of
+ *   the cluster › Evidence (viewer with bbox, clip, AI reasoning, prev/next)
+ *
+ * plus the flat "All detections" list and the recurring spots, as separate
+ * views. Places are shown as reverse-geocoded street · quartier, town;
+ * coordinates are secondary. Deep links: ?tab=active|resolved|detections|
+ * recurring, ?job_id=<job> (All detections of a job), ?hazard=<id>,
+ * ?detection=<id>. Resolve / Reopen need detections:edit; the rejected-data
+ * export needs datasets:view. Components: components/hazard-track/*.
+ */
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { toast } from "sonner"
 import {
-  Search, Filter, MapPin, ImageIcon, Video, AlertTriangle,
-  ChevronLeft, ChevronRight, Eye, CheckCircle, XCircle,
+  ArrowLeft, CheckCircle2, Download, FileJson, FileSpreadsheet, Layers, List, Loader2, MapPinned, MousePointerClick, Repeat,
+  TriangleAlert,
 } from "lucide-react"
+import { Sidebar } from "@/components/sidebar"
+import { Topbar } from "@/components/topbar"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { useAuth } from "@/components/auth-provider"
+import { RequirePermission } from "@/components/require-permission"
+import { useM6Labels } from "@/components/m6-shared"
+import { useNow } from "@/components/hazard-lifecycle"
+import { RecurringSpotsView } from "@/components/hazard-recurring-spots"
+import { PageHeader } from "@/components/page-header"
+import { StatCard, type Tone } from "@/components/stat-card"
+import { DataCard } from "@/components/data-toolbar"
+import { ClusterList, EMPTY_CLUSTER_FILTERS, placeQuery, type ClusterFilters, type ClusterStatus } from "@/components/hazard-track/cluster-list"
+import { ClusterMap } from "@/components/hazard-track/cluster-map"
+import { ClusterDetail } from "@/components/hazard-track/cluster-detail"
+import { EvidenceViewer } from "@/components/hazard-track/evidence-viewer"
+import { AllDetectionsView } from "@/components/hazard-track/all-detections"
+import { AddressBackfillBanner } from "@/components/hazard-track/address-backfill"
+import { useDebounced, useIsNarrow } from "@/components/hazard-track/shared"
 import { cn } from "@/lib/utils"
-import { format } from "date-fns"
-import { fetchDetections, resolveMinioUrl, type ApiDetection } from "@/lib/api"
+import { errorText } from "@/lib/auth-api"
+import {
+  downloadRejectedExport, getHazardSummary, hazardMembers, listDetections, listHazardPlaces, listHazards, listRecurringSpots,
+  type Hazard, type HazardDetail, type HazardPlace,
+} from "@/lib/module6-api"
 
-const PAGE_SIZE = 15
+type Tab = "active" | "resolved" | "detections" | "recurring"
+const TABS: Tab[] = ["active", "resolved", "detections", "recurring"]
+const asTab = (v: string | null): Tab | null => (v && (TABS as string[]).includes(v) ? (v as Tab) : null)
+const MAP_LIMIT = 200
 
-const statusColors: Record<string, string> = {
-  pending:   "bg-warning/20 text-warning border-warning/30",
-  validated: "bg-success/20 text-success border-success/30",
-  rejected:  "bg-destructive/20 text-destructive border-destructive/30",
-  resolved:  "bg-blue-500/20 text-blue-500 border-blue-500/30",
+export default function HazardTrackPage() {
+  return (
+    <Suspense fallback={null}>
+      <HazardTrack />
+    </Suspense>
+  )
 }
 
-const severityLabel = ["Minor", "Moderate", "Severe", "Critical"]
-const severityColor = [
-  "bg-info/20 text-info border-info/30",
-  "bg-warning/20 text-warning border-warning/30",
-  "bg-chart-3/20 text-chart-3 border-chart-3/30",
-  "bg-destructive/20 text-destructive border-destructive/30",
-]
+function HazardTrack() {
+  const L = useM6Labels()
+  const { t } = L
+  const { can } = useAuth()
+  const canExport = can("datasets", "view")
+  const now = useNow()
+  const narrow = useIsNarrow()
 
-export default function DetectionsPage() {
-  const [detections, setDetections] = useState<ApiDetection[]>([])
-  const [total, setTotal]           = useState(0)
-  const [loading, setLoading]       = useState(true)
-  const [error, setError]           = useState<string | null>(null)
-  const [page, setPage]             = useState(1)
-  const [statusFilter, setStatusFilter] = useState("validated")
-  const [typeFilter, setTypeFilter]     = useState("all")
-  const [search, setSearch]             = useState("")
-  const [selected, setSelected]         = useState<ApiDetection | null>(null)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  const urlJobId = searchParams.get("job_id")
+  const urlTab = asTab(searchParams.get("tab"))
+  const urlHazard = searchParams.get("hazard")
+  const urlDetection = searchParams.get("detection")
+
+  const [tab, setTab] = useState<Tab>(urlJobId ? "detections" : urlTab ?? "active")
+  const [jobId, setJobId] = useState<string | null>(urlJobId)
+  const [reload, setReload] = useState(0)
+  const refresh = useCallback(() => setReload((n) => n + 1), [])
+  const [counts, setCounts] = useState<Record<Tab, number | null>>({ active: null, resolved: null, detections: null, recurring: null })
+  const [exporting, setExporting] = useState<"csv" | "json" | null>(null)
+
+  // Cluster explorer state
+  const clusterStatus: ClusterStatus = tab === "resolved" ? "resolved" : "active"
+  const [filters, setFilters] = useState<ClusterFilters>(EMPTY_CLUSTER_FILTERS)
+  const debounced = useDebounced(filters)
+  const [sort, setSort] = useState("-last_detected_at")
+  const [page, setPage] = useState(1)
+  const pageSize = 25
+  const [items, setItems] = useState<Hazard[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [mapItems, setMapItems] = useState<Hazard[]>([])
+  const [mapTotal, setMapTotal] = useState(0)
+  const [places, setPlaces] = useState<HazardPlace[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(urlHazard)
+  const [detail, setDetail] = useState<HazardDetail | null>(null)
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+
+  // Evidence viewer
+  const [detectionId, setDetectionId] = useState<string | null>(urlDetection)
+  const [siblings, setSiblings] = useState<string[] | null>(null)
+
+  // ── URL sync ──────────────────────────────────────────────────────────────
+  const replaceParams = useCallback((patch: Record<string, string | null>) => {
+    const p = new URLSearchParams(window.location.search)
+    for (const [k, v] of Object.entries(patch)) { if (v == null) p.delete(k); else p.set(k, v) }
+    const q = p.toString()
+    router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false })
+  }, [pathname, router])
 
   useEffect(() => {
+    if (urlJobId === jobId) return
+    setJobId(urlJobId)
+    if (urlJobId) setTab("detections")
+  }, [urlJobId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (urlJobId || !urlTab || urlTab === tab) return
+    setTab(urlTab)
+  }, [urlTab]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (urlHazard !== selectedId) setSelectedId(urlHazard) }, [urlHazard]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (urlDetection !== detectionId) setDetectionId(urlDetection) }, [urlDetection]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const switchTab = (next: Tab) => {
+    setTab(next)
+    setPage(1)
+    if (next === "detections" || next === "recurring") setSelectedId(null)
+    replaceParams({ tab: next === "active" ? null : next, ...(next === "detections" || next === "recurring" ? { hazard: null } : {}) })
+  }
+  const clearJob = () => { setJobId(null); replaceParams({ job_id: null }) }
+  const selectCluster = useCallback((id: string | null) => {
+    setSelectedId(id)
+    if (!id) setDetail(null)
+    replaceParams({ hazard: id, detection: null })
+  }, [replaceParams])
+  const openCluster = (id: string) => {
+    setDetectionId(null)
+    if (tab !== "active" && tab !== "resolved") setTab("active")
+    setSelectedId(id)
+    replaceParams({ tab: tab === "resolved" ? "resolved" : null, hazard: id, detection: null })
+  }
+  const openDetection = useCallback((id: string, ids: string[] | null) => {
+    setDetectionId(id)
+    setSiblings(ids)
+    replaceParams({ detection: id })
+  }, [replaceParams])
+  const closeDetection = () => { setDetectionId(null); replaceParams({ detection: null }) }
+
+  // Siblings for a deep-linked detection inside the selected cluster.
+  const memberIds = useMemo(() => (detail ? hazardMembers(detail).map((m) => m.id) : null), [detail])
+  useEffect(() => {
+    if (detectionId && !siblings && memberIds?.includes(detectionId)) setSiblings(memberIds)
+  }, [detectionId, memberIds, siblings])
+
+  // ── data ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    Promise.allSettled([
+      getHazardSummary(),
+      listHazards({ status: "active", limit: 1 }),
+      listHazards({ status: "resolved", limit: 1 }),
+      listDetections({ limit: 1 }),
+      listRecurringSpots(),
+    ]).then(([s, a, r, d, rs]) => {
+      const byStatus = s.status === "fulfilled" ? s.value.by_status ?? {} : {}
+      setCounts({
+        active: a.status === "fulfilled" ? a.value.total : byStatus.active ?? null,
+        resolved: r.status === "fulfilled" ? r.value.total : byStatus.resolved ?? null,
+        detections: d.status === "fulfilled" ? d.value.total : null,
+        recurring: rs.status === "fulfilled" ? rs.value.total : null,
+      })
+    })
+  }, [reload])
+
+  const query = useMemo(() => {
+    const f = debounced
+    return {
+      status: clusterStatus,
+      type: f.type,
+      ...placeQuery(f.place),
+      date_from: f.dateFrom || undefined,
+      date_to: f.dateTo || undefined,
+      search: f.search.trim() || undefined,
+      resolution_source: clusterStatus === "resolved" ? f.resolution : undefined,
+      recurring_spot: f.recurring === "yes" ? true : f.recurring === "no" ? false : undefined,
+    }
+  }, [debounced, clusterStatus])
+  const isClusters = tab === "active" || tab === "resolved"
+
+  useEffect(() => {
+    if (!isClusters) return
+    let alive = true
     setLoading(true)
     setError(null)
-    const params: Parameters<typeof fetchDetections>[0] = {
-      skip: (page - 1) * PAGE_SIZE,
-      limit: PAGE_SIZE,
-    }
-    if (statusFilter !== "all") params.review_status = statusFilter
-    fetchDetections(params)
-      .then((d) => { setDetections(d.items); setTotal(d.total) })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [page, statusFilter])
+    listHazards({ ...query, sort, skip: (page - 1) * pageSize, limit: pageSize })
+      .then((r) => { if (alive) { setItems(r.items); setTotal(r.total) } })
+      .catch((err) => { if (alive) { setError(errorText(t, err, "m6")); setItems([]); setTotal(0) } })
+      .finally(() => alive && setLoading(false))
+    return () => { alive = false }
+  }, [isClusters, query, sort, page, reload]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filtered = useMemo(() => detections.filter((d) => {
-    if (typeFilter !== "all" && d.type !== typeFilter) return false
-    if (search) {
-      const q = search.toLowerCase()
-      return d.id.toLowerCase().includes(q) || d.type.toLowerCase().includes(q) ||
-        (d.location_name ?? "").toLowerCase().includes(q) ||
-        (d.subtype ?? "").toLowerCase().includes(q)
-    }
-    return true
-  }), [detections, typeFilter, search])
+  useEffect(() => {
+    if (!isClusters) return
+    let alive = true
+    listHazards({ ...query, sort: "-last_detected_at", limit: MAP_LIMIT })
+      .then((r) => { if (alive) { setMapItems(r.items); setMapTotal(r.total) } })
+      .catch(() => { if (alive) { setMapItems([]); setMapTotal(0) } })
+    return () => { alive = false }
+  }, [isClusters, query, reload])
 
-  const totalPages = Math.ceil(total / PAGE_SIZE)
+  useEffect(() => {
+    if (!isClusters) return
+    listHazardPlaces({ status: clusterStatus, type: debounced.type }).then(setPlaces).catch(() => setPlaces([]))
+  }, [isClusters, clusterStatus, debounced.type, reload])
+
+  const doExport = async (format: "csv" | "json") => {
+    setExporting(format)
+    try {
+      await downloadRejectedExport(format, { type: filters.type, date_from: filters.dateFrom || undefined, date_to: filters.dateTo || undefined })
+    } catch (err) {
+      toast.error(errorText(t, err, "m6"))
+    } finally {
+      setExporting(null)
+    }
+  }
+
+  const cards: { key: Tab; label: string; Icon: typeof Layers; tone: Tone }[] = [
+    { key: "active", label: t("ht.kpi.active"), Icon: TriangleAlert, tone: "red" },
+    { key: "resolved", label: t("ht.kpi.resolved"), Icon: CheckCircle2, tone: "green" },
+    { key: "detections", label: t("ht.kpi.detections"), Icon: Layers, tone: "blue" },
+    { key: "recurring", label: t("hzl.tab.recurring"), Icon: Repeat, tone: "purple" },
+  ]
+  const views: { key: "clusters" | "detections" | "recurring"; label: string; Icon: typeof Layers }[] = [
+    { key: "clusters", label: t("ht.view.clusters"), Icon: MapPinned },
+    { key: "detections", label: t("ht.view.detections"), Icon: List },
+    { key: "recurring", label: t("ht.view.recurring"), Icon: Repeat },
+  ]
+  const view = isClusters ? "clusters" : tab
+  // The selected cluster as a list item (map framing) — from the list, the map set or the loaded detail.
+  const selectedHazard: Hazard | null = !selectedId ? null
+    : (detail?.id === selectedId ? detail : null)
+      ?? items.find((h) => h.id === selectedId) ?? mapItems.find((h) => h.id === selectedId) ?? null
+  // Stable array: a new one on every render would rebuild the map layers on each hover.
+  const extraOnMap = selectedHazard && !mapItems.some((h) => h.id === selectedHazard.id) ? selectedHazard : null
+  const mapClusters = useMemo(() => (extraOnMap ? [...mapItems, extraOnMap] : mapItems), [mapItems, extraOnMap])
+  const showList = !narrow || !selectedId
+  const showPane = !narrow || !!selectedId
 
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
       <main className="lg:pl-64">
-        <div className="px-4 py-8 sm:px-6 lg:px-8">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold">All Detections</h1>
-            <p className="mt-1 text-muted-foreground">Validated and rejected road hazard detections</p>
-          </div>
+        <Topbar />
+        <RequirePermission module="detections">
+          <div className="px-4 py-6 sm:px-6 lg:px-8">
+            <PageHeader
+              title={t("m6.hz.title")}
+              description={t("ht.subtitle")}
+              actions={canExport && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-9" disabled={!!exporting}>
+                      {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                      {t("m6.hz.export")}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel className="max-w-[16rem] text-xs font-normal text-muted-foreground">{t("m6.hz.exportHint")}</DropdownMenuLabel>
+                    <DropdownMenuItem onClick={() => doExport("csv")}><FileSpreadsheet className="h-4 w-4" />CSV</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => doExport("json")}><FileJson className="h-4 w-4" />JSON</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            />
 
-          <div className="rounded-xl border bg-card p-6">
-            {/* Filters */}
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input placeholder="Search by ID, type, location..." value={search}
-                  onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+            {/* KPI strip */}
+            <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {cards.map(({ key, label, Icon, tone }) => (
+                <StatCard key={key} icon={Icon} tone={tone} value={counts[key] ?? "—"} label={label}
+                  onClick={() => switchTab(key)}
+                  className={cn(tab === key && "border-primary/60 ring-1 ring-primary/30")} />
+              ))}
+            </div>
+
+            <AddressBackfillBanner onDone={refresh} />
+
+            {/* View switch: clusters explorer / flat detections / recurring spots */}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <div className="inline-flex rounded-xl border bg-card p-1 shadow-sm" role="tablist" aria-label={t("ht.view.label")}>
+                {views.map(({ key, label, Icon }) => (
+                  <button key={key} type="button" role="tab" aria-selected={view === key}
+                    onClick={() => switchTab(key === "clusters" ? (tab === "resolved" ? "resolved" : "active") : key)}
+                    className={cn("inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                      view === key ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
+                    <Icon className="h-4 w-4" />{label}
+                  </button>
+                ))}
               </div>
-              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1) }}>
-                <SelectTrigger className="w-36"><Filter className="mr-2 h-4 w-4" /><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="validated">Validated</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                  <SelectItem value="all">All (incl. pending)</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setPage(1) }}>
-                <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="pothole">Pothole</SelectItem>
-                  <SelectItem value="traffic_sign">Traffic Sign</SelectItem>
-                  <SelectItem value="speed_bump">Speed Bump</SelectItem>
-                </SelectContent>
-              </Select>
+              {view === "clusters" && <p className="text-xs text-muted-foreground">{t("ht.view.clustersHint")}</p>}
             </div>
 
-            <div className="flex justify-between text-sm text-muted-foreground mb-2">
-              <span>Showing {filtered.length} of {total}</span>
-              <span>Page {page} of {totalPages || 1}</span>
-            </div>
+            {view === "recurring" && (
+              <DataCard>
+                <RecurringSpotsView onOpenHazard={openCluster} reloadKey={reload} />
+              </DataCard>
+            )}
 
-            {error && <p className="text-destructive text-sm mb-3">{error}</p>}
+            {view === "detections" && (
+              <DataCard>
+                <AllDetectionsView jobId={jobId} onClearJob={clearJob} reloadKey={reload}
+                  onOpenDetection={(id, ids) => openDetection(id, ids)} onOpenCluster={openCluster} />
+              </DataCard>
+            )}
 
-            <div className="rounded-lg border overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead className="w-20">Frame</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Severity</TableHead>
-                    <TableHead>Confidence</TableHead>
-                    <TableHead className="hidden md:table-cell">Location / GPS</TableHead>
-                    <TableHead className="hidden lg:table-cell">Reviewed by</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading && (
-                    <TableRow><TableCell colSpan={8} className="h-32 text-center text-muted-foreground">Loading...</TableCell></TableRow>
-                  )}
-                  {!loading && filtered.map((d) => {
-                    const img = resolveMinioUrl(d.image_url)
-                    const sev = d.type === "pothole" && d.subtype != null ? parseInt(d.subtype) : null
-                    return (
-                      <TableRow key={d.id}>
-                        <TableCell>
-                          <div className="relative h-12 w-16 rounded overflow-hidden bg-muted">
-                            {img
-                              ? <Image src={img} alt="" fill className="object-cover" unoptimized />
-                              : <div className="flex h-full items-center justify-center"><ImageIcon className="h-4 w-4 text-muted-foreground" /></div>
-                            }
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium capitalize">{d.type.replace("_", " ")}</div>
-                          {d.subtype && d.type !== "pothole" && (
-                            <div className="text-xs text-muted-foreground capitalize">{d.subtype.replace("_", " ")}</div>
-                          )}
-                          <div className="text-xs text-muted-foreground">{d.id.slice(0, 8)}</div>
-                        </TableCell>
-                        <TableCell>
-                          {sev !== null && !isNaN(sev) ? (
-                            <Badge variant="outline" className={cn("text-xs", severityColor[sev])}>
-                              {severityLabel[sev]}
-                            </Badge>
-                          ) : <span className="text-xs text-muted-foreground">—</span>}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className="h-2 w-16 rounded-full bg-muted overflow-hidden">
-                              <div className="h-full bg-primary" style={{ width: `${d.confidence * 100}%` }} />
-                            </div>
-                            <span className="text-sm">{Math.round(d.confidence * 100)}%</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <div className="flex items-center gap-1 text-sm">
-                            <MapPin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                            <span className="truncate max-w-[150px]">{d.location_name ?? "—"}</span>
-                          </div>
-                          {d.latitude != null && (
-                            <div className="text-xs text-muted-foreground mt-0.5">
-                              {d.latitude.toFixed(4)}, {d.longitude?.toFixed(4)}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm">
-                          {d.reviewed_by ?? "—"}
-                          {d.reviewed_at && (
-                            <div className="text-xs text-muted-foreground">
-                              {format(new Date(d.reviewed_at), "MMM d, HH:mm")}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={cn("capitalize", statusColors[d.review_status])}>
-                            {d.review_status === "validated" ? <CheckCircle className="h-3 w-3 mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
-                            {d.review_status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelected(d)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                  {!loading && filtered.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={8} className="h-32 text-center">
-                        <AlertTriangle className="mx-auto h-8 w-8 text-muted-foreground/50" />
-                        <p className="mt-2 text-sm text-muted-foreground">No detections found</p>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+            {view === "clusters" && (
+              <div className="grid gap-4 lg:h-[calc(100vh-15rem)] lg:min-h-[640px] lg:grid-cols-[minmax(340px,420px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
+                {/* Level 1 — Cluster list */}
+                {showList && (
+                  <DataCard className="flex min-h-0 flex-col">
+                    {narrow && (
+                      <ClusterMap className="m-3 mb-0 h-56" clusters={mapClusters} selected={null}
+                        hoveredId={hoveredId} onHover={setHoveredId} onSelect={selectCluster}
+                        capped={mapTotal > mapItems.length ? mapItems.length : null} />
+                    )}
+                    <ClusterList
+                      className="min-h-0 flex-1"
+                      status={clusterStatus}
+                      onStatus={(s) => switchTab(s)}
+                      counts={{ active: counts.active, resolved: counts.resolved }}
+                      filters={filters}
+                      onFilter={(k, v) => { setFilters((f) => ({ ...f, [k]: v })); setPage(1) }}
+                      onReset={() => { setFilters(EMPTY_CLUSTER_FILTERS); setPage(1) }}
+                      places={places}
+                      sort={sort}
+                      onSort={(s) => { setSort(s); setPage(1) }}
+                      items={items}
+                      total={total}
+                      loading={loading}
+                      error={error}
+                      page={page}
+                      pageSize={pageSize}
+                      onPage={setPage}
+                      selectedId={selectedId}
+                      hoveredId={hoveredId}
+                      onSelect={selectCluster}
+                      onHover={setHoveredId}
+                      now={now}
+                    />
+                  </DataCard>
+                )}
 
-            {totalPages > 1 && (
-              <div className="mt-4 flex items-center justify-end gap-2">
-                <Button variant="outline" size="icon" className="h-8 w-8"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-sm text-muted-foreground">{page} / {totalPages}</span>
-                <Button variant="outline" size="icon" className="h-8 w-8"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+                {/* Level 2 — Overview map + cluster detail */}
+                {showPane && (
+                  <div className="flex min-h-0 flex-col gap-4">
+                    {narrow && selectedId && (
+                      <Button variant="outline" size="sm" className="self-start" onClick={() => selectCluster(null)}>
+                        <ArrowLeft className="h-4 w-4" />{t("ht.detail.back")}
+                      </Button>
+                    )}
+                    {(!narrow || selectedId) && (
+                      <ClusterMap
+                        className={cn("shrink-0 transition-[height]", selectedId ? "h-64 lg:h-[38%]" : "h-[420px] lg:h-auto lg:min-h-0 lg:flex-1")}
+                        clusters={mapClusters}
+                        selected={selectedHazard}
+                        members={detail && detail.id === selectedId ? hazardMembers(detail) : undefined}
+                        selectedDetectionId={detectionId}
+                        hoveredId={hoveredId}
+                        onHover={setHoveredId}
+                        onSelect={selectCluster}
+                        onOpenDetection={(id) => openDetection(id, memberIds)}
+                        capped={mapTotal > mapItems.length ? mapItems.length : null}
+                      />
+                    )}
+                    {selectedId ? (
+                      <DataCard className="min-h-0 flex-1 overflow-y-auto">
+                        <ClusterDetail
+                          key={selectedId}
+                          id={selectedId}
+                          reloadKey={reload}
+                          onBack={() => selectCluster(null)}
+                          onChanged={refresh}
+                          onLoaded={setDetail}
+                          onOpenDetection={(id) => openDetection(id, memberIds)}
+                          selectedDetectionId={detectionId}
+                        />
+                      </DataCard>
+                    ) : null}
+                    {!selectedId && !narrow && items.length > 0 && (
+                      <p className="-mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <MousePointerClick className="h-3.5 w-3.5" />{t("ht.detail.emptyText")}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
-        </div>
+        </RequirePermission>
       </main>
 
-      {/* Detail modal */}
-      <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          {selected && (() => {
-            const sev = selected.type === "pothole" && selected.subtype != null ? parseInt(selected.subtype) : null
-            return (
-              <>
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 capitalize">
-                    {selected.type.replace("_", " ")}
-                    <Badge variant="outline" className={statusColors[selected.review_status]}>
-                      {selected.review_status}
-                    </Badge>
-                    {sev !== null && !isNaN(sev) && (
-                      <Badge variant="outline" className={severityColor[sev]}>{severityLabel[sev]}</Badge>
-                    )}
-                  </DialogTitle>
-                  <DialogDescription>ID: {selected.id.slice(0, 8)} · Frame #{selected.frame_number}</DialogDescription>
-                </DialogHeader>
-
-                <div className="space-y-5">
-                  {/* Annotated frame */}
-                  {resolveMinioUrl(selected.image_url) ? (
-                    <div className="relative aspect-video rounded-lg overflow-hidden bg-muted">
-                      <Image src={resolveMinioUrl(selected.image_url)!} alt="frame" fill className="object-contain" unoptimized />
-                    </div>
-                  ) : (
-                    <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
-                      <ImageIcon className="h-16 w-16 text-muted-foreground" />
-                    </div>
-                  )}
-
-                  {/* Crop */}
-                  {resolveMinioUrl(selected.crop_url) && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-1">Crop</p>
-                      <div className="relative h-28 w-40 rounded-lg overflow-hidden bg-muted">
-                        <Image src={resolveMinioUrl(selected.crop_url)!} alt="crop" fill className="object-contain" unoptimized />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Context clip */}
-                  {resolveMinioUrl(selected.context_clip_url) && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                        <Video className="h-3.5 w-3.5" /> Context Clip (±3s)
-                      </p>
-                      <video
-                        controls
-                        preload="metadata"
-                        className="w-full rounded-lg bg-black"
-                        style={{ maxHeight: 240 }}
-                      >
-                        <source src={resolveMinioUrl(selected.context_clip_url)!} type="video/mp4" />
-                      </video>
-                    </div>
-                  )}
-
-                  {/* Details */}
-                  <div className="grid gap-3 sm:grid-cols-2 text-sm rounded-lg border p-4">
-                    <div><p className="text-xs text-muted-foreground">Confidence</p><p>{Math.round(selected.confidence * 100)}%</p></div>
-                    <div><p className="text-xs text-muted-foreground">Type</p><p className="capitalize">{selected.type.replace("_", " ")}</p></div>
-                    {selected.subtype && (
-                      <div><p className="text-xs text-muted-foreground">{selected.type === "pothole" ? "Severity score" : "Sign type"}</p>
-                        <p className="capitalize">{selected.type === "pothole" && sev !== null && !isNaN(sev)
-                          ? `${sev} — ${severityLabel[sev]}` : selected.subtype.replace("_", " ")}</p>
-                      </div>
-                    )}
-                    {selected.latitude != null && (
-                      <div><p className="text-xs text-muted-foreground">GPS</p>
-                        <p>{selected.latitude.toFixed(6)}, {selected.longitude?.toFixed(6)}</p></div>
-                    )}
-                    {selected.location_name && (
-                      <div className="sm:col-span-2"><p className="text-xs text-muted-foreground">Location</p>
-                        <p>{selected.location_name}</p></div>
-                    )}
-                    {selected.speed_kmh != null && (
-                      <div><p className="text-xs text-muted-foreground">Speed</p><p>{selected.speed_kmh} km/h</p></div>
-                    )}
-                    {selected.captured_at && (
-                      <div><p className="text-xs text-muted-foreground">Captured</p>
-                        <p>{format(new Date(selected.captured_at), "PPpp")}</p></div>
-                    )}
-                    {selected.raw_gps_text && (
-                      <div className="sm:col-span-2"><p className="text-xs text-muted-foreground">Raw GPS OCR</p>
-                        <code className="text-xs bg-muted px-2 py-0.5 rounded">{selected.raw_gps_text}</code></div>
-                    )}
-                  </div>
-
-                  {/* Review info */}
-                  {selected.reviewed_at && (
-                    <div className="rounded-lg border p-4 space-y-1 text-sm">
-                      <p className="font-medium">Review</p>
-                      <p>By <span className="font-medium">{selected.reviewed_by}</span> · {format(new Date(selected.reviewed_at), "PPpp")}</p>
-                      {selected.review_note && <p className="text-muted-foreground italic">"{selected.review_note}"</p>}
-                    </div>
-                  )}
-                </div>
-              </>
-            )
-          })()}
-        </DialogContent>
-      </Dialog>
+      <EvidenceViewer
+        detectionId={detectionId}
+        siblings={siblings}
+        onNavigate={(id) => openDetection(id, siblings)}
+        onClose={closeDetection}
+        onOpenCluster={openCluster}
+      />
     </div>
   )
 }

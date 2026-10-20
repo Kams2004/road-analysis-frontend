@@ -50,6 +50,7 @@ export function StreamSourceManager() {
       id: `stream-${Date.now()}`,
       name: newSource.name,
       url: newSource.url,
+      type: newSource.type as StreamSource["type"],
       status: "inactive",
     }
     setSources((prev) => [source, ...prev])

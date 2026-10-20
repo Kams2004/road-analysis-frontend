@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import { useMapTiles, type LeafletTiles } from "@/hooks/use-map-tiles"
+import { useT } from "@/lib/i18n"
 
 export interface LatLng {
   lat: number
@@ -26,6 +28,26 @@ export default function NavigationMap({
   const destMarkerRef = useRef<import("leaflet").Marker | null>(null)
   const routeLayerRef = useRef<import("leaflet").Polyline | null>(null)
   const userCircleRef = useRef<import("leaflet").CircleMarker | null>(null)
+  const tileLayerRef = useRef<import("leaflet").TileLayer | null>(null)
+  const t = useT()
+  // Per-user base map (admin-controlled OSM URL or Google tiles).
+  const tiles = useMapTiles()
+  const tilesRef = useRef<LeafletTiles>(tiles)
+
+  // ---------- Swap the base layer when the tile config arrives/changes ----------
+  useEffect(() => {
+    tilesRef.current = tiles
+    const map = mapRef.current
+    if (!map) return
+    import("leaflet").then((L) => {
+      if (mapRef.current !== map) return
+      const prev = tileLayerRef.current
+      const layer = makeTileLayer(L, tiles).addTo(map)
+      layer.bringToBack()
+      tileLayerRef.current = layer
+      if (prev) map.removeLayer(prev)
+    })
+  }, [tiles])
 
   // ---------- Init map once ----------
   useEffect(() => {
@@ -48,11 +70,8 @@ export default function NavigationMap({
       })
       mapRef.current = map
 
-      // Light tile layer — matches the image's clean white map style
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-        maxZoom: 20,
-        subdomains: "abcd",
-      }).addTo(map)
+      // Base layer from the user's map preference (useMapTiles)
+      tileLayerRef.current = makeTileLayer(L, tilesRef.current).addTo(map)
 
       L.control.attribution({ position: "bottomright", prefix: "" }).addTo(map)
       L.control.zoom({ position: "topright" }).addTo(map)
@@ -67,6 +86,7 @@ export default function NavigationMap({
       destMarkerRef.current = null
       routeLayerRef.current = null
       userCircleRef.current = null
+      tileLayerRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -201,7 +221,22 @@ export default function NavigationMap({
         rel="stylesheet"
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       />
-      <div ref={containerRef} className="w-full h-full" />
+      <div className="relative w-full h-full">
+        <div ref={containerRef} className="w-full h-full" />
+        {(tiles.fallbackReason === "google_not_configured" || tiles.fallbackReason === "google_unavailable") && (
+          <div className="pointer-events-none absolute bottom-2 left-2 z-[1000] rounded bg-background/85 px-2 py-0.5 text-[10px] text-muted-foreground shadow-sm">
+            {t("pmap.common.googleFallback")}
+          </div>
+        )}
+      </div>
     </>
   )
+}
+
+function makeTileLayer(L: typeof import("leaflet"), tiles: LeafletTiles) {
+  return L.tileLayer(tiles.url, {
+    subdomains: tiles.subdomains.length ? tiles.subdomains : undefined,
+    attribution: tiles.attribution,
+    maxZoom: tiles.maxZoom,
+  })
 }

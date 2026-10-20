@@ -5,9 +5,6 @@ import dynamic from "next/dynamic"
 import {
   Search,
   Mic,
-  Home,
-  Briefcase,
-  Plus,
   Clock,
   X,
   ArrowLeft,
@@ -21,18 +18,25 @@ import {
   type Destination,
 } from "@/lib/recent-destinations"
 import type { LatLng } from "@/components/navigation-map"
+import { useT } from "@/lib/i18n"
+import { RequirePermission } from "@/components/require-permission"
+
+function NavMapLoading() {
+  const t = useT()
+  return (
+    <div className="w-full h-full flex items-center justify-center bg-gray-100">
+      <div className="flex flex-col items-center gap-2">
+        <div className="h-10 w-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+        <p className="text-sm text-gray-500">{t("pmap.navmap.loading")}</p>
+      </div>
+    </div>
+  )
+}
 
 // ─── Dynamic map import (no SSR) ─────────────────────────────────────────────
 const NavigationMap = dynamic(() => import("@/components/navigation-map"), {
   ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-gray-100">
-      <div className="flex flex-col items-center gap-2">
-        <div className="h-10 w-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-        <p className="text-sm text-gray-500">Loading map…</p>
-      </div>
-    </div>
-  ),
+  loading: () => <NavMapLoading />,
 })
 
 // ─── Nominatim geocoding helper ───────────────────────────────────────────────
@@ -99,6 +103,15 @@ function subLabel(result: NominatimResult): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function NavigateMapPage() {
+  return (
+    <RequirePermission module="navigate">
+      <NavigateMap />
+    </RequirePermission>
+  )
+}
+
+function NavigateMap() {
+  const t = useT()
   // Location & destination state
   const [userLocation, setUserLocation] = useState<LatLng | null>(null)
   const [destination, setDestination] = useState<LatLng | null>(null)
@@ -232,17 +245,6 @@ export default function NavigateMapPage() {
     setDestLabel(null)
   }, [])
 
-  // ── Quick shortcuts (Home / Work) ──
-  const handleShortcut = useCallback(
-    async (label: string) => {
-      if (!userLocation) return
-      // In a real app this would load a saved address; we just do a search for demo
-      setQuery(label)
-      openSheet()
-    },
-    [userLocation, openSheet]
-  )
-
   return (
     <div className="relative h-screen w-full overflow-hidden bg-gray-100 select-none">
       {/* ── Full-screen map ────────────────────────────────── */}
@@ -262,9 +264,9 @@ export default function NavigateMapPage() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold truncate">{destLabel}</p>
-            <p className="text-xs text-gray-400">Route active</p>
+            <p className="text-xs text-gray-400">{t("pmap.navmap.routeActive")}</p>
           </div>
-          <button onClick={clearRoute} className="h-7 w-7 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors">
+          <button onClick={clearRoute} aria-label={t("pmap.navmap.clearRoute")} className="h-7 w-7 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors">
             <X className="h-4 w-4 text-gray-500" />
           </button>
         </div>
@@ -294,37 +296,15 @@ export default function NavigateMapPage() {
                 className="flex items-center gap-3 w-full rounded-2xl bg-gray-100 px-4 py-3.5 text-left"
               >
                 <Search className="h-5 w-5 text-gray-400 shrink-0" />
-                <span className="flex-1 text-gray-400 text-sm font-medium">Where to?</span>
+                <span className="flex-1 text-gray-400 text-sm font-medium">{t("pmap.navmap.whereTo")}</span>
                 <Mic className="h-5 w-5 text-primary shrink-0" />
               </button>
-
-              {/* Quick shortcuts */}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => handleShortcut("Home")}
-                  className="flex-1 flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 shadow-sm hover:border-primary/40 transition-colors"
-                >
-                  <Home className="h-4 w-4 text-orange-400 shrink-0" />
-                  <span className="text-sm font-medium text-gray-700">Home</span>
-                </button>
-                <button
-                  onClick={() => handleShortcut("Work")}
-                  className="flex-1 flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 shadow-sm hover:border-primary/40 transition-colors"
-                >
-                  <Briefcase className="h-4 w-4 text-amber-500 shrink-0" />
-                  <span className="text-sm font-medium text-gray-700">Work</span>
-                </button>
-                <button className="flex items-center gap-1.5 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 shadow-sm hover:border-primary/40 transition-colors">
-                  <Plus className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium text-primary">New</span>
-                </button>
-              </div>
 
               {/* Recent destinations */}
               {recent.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-1">
-                    Recent
+                    {t("pmap.navmap.recent")}
                   </p>
                   <div className="space-y-0.5">
                     {recent.slice(0, 4).map((dest) => (
@@ -355,7 +335,7 @@ export default function NavigateMapPage() {
               {/* Search header */}
               <div className="px-4 pt-2 pb-3 shrink-0 border-b border-gray-100">
                 <div className="flex items-center gap-3">
-                  <button onClick={closeSheet} className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
+                  <button onClick={closeSheet} aria-label={t("pmap.navmap.back")} className="h-8 w-8 shrink-0 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors">
                     <ArrowLeft className="h-5 w-5 text-gray-600" />
                   </button>
                   <div className="flex-1 flex items-center gap-2 rounded-2xl bg-gray-100 px-4 py-2.5">
@@ -363,35 +343,19 @@ export default function NavigateMapPage() {
                     <input
                       ref={searchInputRef}
                       type="text"
-                      placeholder="Search destination…"
+                      placeholder={t("pmap.navmap.searchPlaceholder")}
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       className="flex-1 bg-transparent text-sm outline-none placeholder:text-gray-400 text-gray-800"
                     />
                     {query && (
-                      <button onClick={() => setQuery("")}>
+                      <button onClick={() => setQuery("")} aria-label={t("pmap.navmap.clearSearch")}>
                         <X className="h-4 w-4 text-gray-400" />
                       </button>
                     )}
                   </div>
                   <Mic className="h-5 w-5 text-primary shrink-0" />
                 </div>
-              </div>
-
-              {/* Quick shortcuts inside expanded */}
-              <div className="flex gap-3 px-4 py-3 shrink-0">
-                <button onClick={() => handleShortcut("Home")} className="flex-1 flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 shadow-sm">
-                  <Home className="h-4 w-4 text-orange-400 shrink-0" />
-                  <span className="text-sm font-medium text-gray-700">Home</span>
-                </button>
-                <button onClick={() => handleShortcut("Work")} className="flex-1 flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 shadow-sm">
-                  <Briefcase className="h-4 w-4 text-amber-500 shrink-0" />
-                  <span className="text-sm font-medium text-gray-700">Work</span>
-                </button>
-                <button className="flex items-center gap-1.5 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 shadow-sm">
-                  <Plus className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium text-primary">New</span>
-                </button>
               </div>
 
               {/* Results / recent list — scrollable */}
@@ -403,11 +367,11 @@ export default function NavigateMapPage() {
                     {searching && (
                       <div className="flex items-center gap-2 py-4 text-sm text-gray-400">
                         <div className="h-4 w-4 rounded-full border-2 border-gray-300 border-t-primary animate-spin" />
-                        Searching…
+                        {t("pmap.navmap.searching")}
                       </div>
                     )}
                     {!searching && results.length === 0 && query.trim() && (
-                      <p className="py-6 text-center text-sm text-gray-400">No results for "{query}"</p>
+                      <p className="py-6 text-center text-sm text-gray-400">{t("pmap.navmap.noResults", { query })}</p>
                     )}
                     {results.map((r) => (
                       <button
@@ -434,7 +398,7 @@ export default function NavigateMapPage() {
                     {recent.length > 0 && (
                       <>
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1 mt-2">
-                          Recent
+                          {t("pmap.navmap.recent")}
                         </p>
                         {recent.map((dest) => (
                           <button
@@ -457,8 +421,8 @@ export default function NavigateMapPage() {
                     {recent.length === 0 && (
                       <div className="flex flex-col items-center gap-2 py-12 text-center">
                         <Navigation className="h-10 w-10 text-gray-200" />
-                        <p className="text-sm text-gray-400">No recent destinations yet</p>
-                        <p className="text-xs text-gray-300">Search for a place to get started</p>
+                        <p className="text-sm text-gray-400">{t("pmap.navmap.noRecent")}</p>
+                        <p className="text-xs text-gray-300">{t("pmap.navmap.searchHint")}</p>
                       </div>
                     )}
                   </>

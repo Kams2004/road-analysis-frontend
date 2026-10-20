@@ -3,8 +3,19 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { MapPin, Navigation, Shield, ChevronRight } from "lucide-react"
+import { useT } from "@/lib/i18n"
+import { RequirePermission } from "@/components/require-permission"
 
 export default function LocationPermissionPage() {
+  return (
+    <RequirePermission module="navigate">
+      <LocationPermission />
+    </RequirePermission>
+  )
+}
+
+function LocationPermission() {
+  const t = useT()
   const router = useRouter()
   const [loading, setLoading] = useState(true)   // start true — checking existing permission
   const [denied, setDenied] = useState(false)
@@ -75,7 +86,7 @@ export default function LocationPermissionPage() {
         <div className="flex flex-col items-center gap-3">
           <div className="h-10 w-10 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
           <p className="text-sm text-muted-foreground">
-            {denied ? "Location denied — redirecting…" : "Checking location…"}
+            {denied ? t("pmap.nav.denied") : t("pmap.nav.checking")}
           </p>
         </div>
       </div>
@@ -97,24 +108,24 @@ export default function LocationPermissionPage() {
 
       {/* Text */}
       <h1 className="text-2xl font-bold text-foreground text-center mb-3">
-        Allow Location Access
+        {t("pmap.nav.title")}
       </h1>
       <p className="text-muted-foreground text-center text-sm max-w-xs leading-relaxed mb-2">
-        VIASafe needs your location to show you on the map and help you navigate to your destination.
+        {t("pmap.nav.intro")}
       </p>
 
       {denied && (
         <p className="text-destructive text-xs text-center mb-2">
-          Location denied — continuing without GPS…
+          {t("pmap.nav.deniedContinue")}
         </p>
       )}
 
       {/* Feature bullets */}
       <div className="w-full max-w-xs space-y-3 my-6">
         {[
-          { icon: Navigation, label: "See your real-time position on the map" },
-          { icon: MapPin,     label: "Get accurate route directions" },
-          { icon: Shield,     label: "Your location is never stored on our servers" },
+          { icon: Navigation, label: t("pmap.nav.feat1") },
+          { icon: MapPin,     label: t("pmap.nav.feat2") },
+          { icon: Shield,     label: t("pmap.nav.feat3") },
         ].map(({ icon: Icon, label }) => (
           <div key={label} className="flex items-center gap-3 rounded-xl bg-muted/50 px-4 py-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15">
@@ -130,7 +141,7 @@ export default function LocationPermissionPage() {
         onClick={requestPermission}
         className="w-full max-w-xs flex items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-semibold text-white shadow-lg shadow-primary/30 active:scale-95 transition-transform"
       >
-        Allow Location
+        {t("pmap.nav.allow")}
         <ChevronRight className="h-5 w-5" />
       </button>
 
@@ -138,7 +149,7 @@ export default function LocationPermissionPage() {
         onClick={skipPermission}
         className="mt-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
-        Skip for now
+        {t("pmap.nav.skip")}
       </button>
     </div>
   )

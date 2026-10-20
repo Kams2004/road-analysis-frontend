@@ -5,6 +5,8 @@ export interface ApiDetection {
   job_id: string
   type: string
   subtype: string | null
+  /** Traffic signs: the sign classifier's top-3 sign codes (score 0–1, descending). */
+  class_candidates?: { code: string; score: number }[] | null
   confidence: number
   frame_number: number
   raw_gps_text: string | null
@@ -24,6 +26,24 @@ export interface ApiDetection {
   review_note: string | null
   resolved_at: string | null
   created_at: string
+  // Also returned by GET /detections/ (DetectionOut) — readable address,
+  // hazard membership, bounding box and recording time.
+  display_location?: string | null
+  road?: string | null
+  locality?: string | null
+  district?: string | null
+  town?: string | null
+  city?: string | null
+  region?: string | null
+  country?: string | null
+  hazard_id?: string | null
+  hazard_code?: string | null
+  bbox_x1?: number | null
+  bbox_y1?: number | null
+  bbox_x2?: number | null
+  bbox_y2?: number | null
+  recorded_at?: string | null
+  ai_details?: { vehicle_class?: string | null; severity?: string | null; [k: string]: unknown } | null
 }
 
 export interface DetectionListOut {
@@ -45,6 +65,26 @@ export async function fetchDetections(params: {
   const res = await fetch(`${API_BASE}/detections/?${q}`, { cache: "no-store" })
   if (!res.ok) throw new Error("Failed to fetch detections")
   return res.json()
+}
+
+/** The API serves at most this many detections per page. */
+const DETECTIONS_PAGE_MAX = 200
+
+/** Up to `max` detections, fetched page by page (the API caps a page at 200). */
+export async function fetchAllDetections(
+  params: { job_id?: string; review_status?: string } = {},
+  max = 1000,
+): Promise<DetectionListOut> {
+  const first = await fetchDetections({ ...params, skip: 0, limit: Math.min(DETECTIONS_PAGE_MAX, max) })
+  const items = [...first.items]
+  while (items.length < Math.min(first.total, max)) {
+    const page = await fetchDetections({
+      ...params, skip: items.length, limit: Math.min(DETECTIONS_PAGE_MAX, max - items.length),
+    })
+    if (!page.items.length) break
+    items.push(...page.items)
+  }
+  return { ...first, items }
 }
 
 export async function correctLocation(id: string, raw_gps_text: string): Promise<ApiDetection> {
@@ -86,7 +126,7 @@ export async function reviewDetection(
 export interface JobOut {
   id: string
   filename: string
-  status: "pending" | "processing" | "done" | "failed"
+  status: "pending" | "processing" | "done" | "failed" | "cancelled"
   enabled_models: string | null
   total_frames: number
   processed: number
@@ -115,9 +155,11 @@ export async function getJob(jobId: string): Promise<JobOut> {
 }
 
 export async function fetchJobs(skip = 0, limit = 50): Promise<JobOut[]> {
-  const res = await fetch(`${API_BASE}/jobs/?skip=${skip}&limit=${limit}`, { cache: "no-store" })
+  const res = await fetch(`${API_BASE}/jobs/?skip=${skip}&limit=${Math.min(200, limit)}`, { cache: "no-store" })
   if (!res.ok) throw new Error("Failed to fetch jobs")
-  return res.json()
+  // GET /jobs/ returns {total, items} (Module 7); older servers returned a plain array.
+  const data = await res.json()
+  return Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : []
 }
 
 export async function deleteJob(jobId: string): Promise<void> {
@@ -166,6 +208,9 @@ export type SignalementType =
   | "embouteillage" | "police" | "accident" | "danger"
   | "route_fermee" | "voie_bloquee" | "probleme_de_carte"
   | "mauvais_temps" | "prix_carburant" | "assistance_route" | "debogage"
+  | "nid_de_poule" | "obstacle" | "inondation" | "autre"
+  | "vehicule_panne" | "dos_d_ane" | "route_glissante" | "eboulement"
+  | "travaux" | "animaux" | "vehicule_dangereux"
 
 export type SignalementStatus = "actif" | "annule" | "rejete"
 
@@ -182,6 +227,81 @@ export interface ApiSignalement {
   moderated_at: string | null
   moderation_note: string | null
   reported_at: string
+  // Community votes — counted votes only (cast near the report, one per voter)
+  present_count?: number
+  absent_count?: number
+  invalid_vote_count?: number
+  ignore_count?: number          // devices that passed nearby without voting
+  uncertain?: boolean
+  last_confirmed_at?: string | null
+  expires_at?: string | null
+  expired?: boolean
+}
+
+export type VoteReason = "too_far" | "duplicate" | "no_position"
+
+export interface SignalementVote {
+  id: string
+  vote: "present" | "absent"
+  voter_user_id: string | null
+  voter_email: string | null
+  voter_device_id: string | null
+  voter: string | null
+  latitude: number | null
+  longitude: number | null
+  distance_m: number | null
+  counted: boolean
+  reason: VoteReason | null
+  created_at: string
+}
+
+export interface SignalementPass {
+  id: string
+  device_id: string | null
+  user_id: string | null
+  voter: string | null
+  latitude: number | null
+  longitude: number | null
+  distance_m: number | null
+  counted: boolean
+  voted: boolean
+  created_at: string
+}
+
+export interface SignalementVoteList {
+  total: number
+  present_count: number
+  absent_count: number
+  invalid_vote_count: number
+  vote_max_distance_m: number
+  ignore_count: number
+  uncertain: boolean
+  items: SignalementVote[]
+  passes: SignalementPass[]
+}
+
+export interface FlaggedVoter {
+  voter: string | null
+  voter_user_id: string | null
+  voter_email: string | null
+  voter_device_id: string | null
+  invalid_votes: number
+  too_far_votes: number
+  total_votes: number
+  reports: number
+  last_vote_at: string
+}
+
+export async function fetchSignalementVotes(id: string): Promise<SignalementVoteList> {
+  const res = await fetch(`${API_BASE}/signalements/${id}/votes`, { cache: "no-store" })
+  if (!res.ok) throw new Error("Failed to fetch votes")
+  return res.json()
+}
+
+export async function fetchFlaggedVoters(limit = 20): Promise<FlaggedVoter[]> {
+  const res = await fetch(`${API_BASE}/signalements/votes/flagged?limit=${limit}`, { cache: "no-store" })
+  if (!res.ok) throw new Error("Failed to fetch flagged voters")
+  return res.json()
 }
 
 export interface SignalementListOut {
@@ -207,7 +327,7 @@ export async function fetchSignalements(params: {
 
 export async function moderateSignalement(
   id: string,
-  status: "annule" | "rejete",
+  status: "annule" | "rejete" | "actif",   // "actif" restores a hidden report
   moderated_by: string,
   note?: string,
 ): Promise<ApiSignalement> {
@@ -218,7 +338,7 @@ export async function moderateSignalement(
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err.detail || "Failed to moderate signalement")
+    throw new Error((typeof err.detail === "string" ? err.detail : err.detail?.message) || "Failed to moderate signalement")
   }
   return res.json()
 }
