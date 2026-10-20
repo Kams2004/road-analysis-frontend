@@ -2,7 +2,7 @@
  * Typed client for the global Cluster Configuration (Module 6 —
  * RRAP-06-009/010/011): urban / out-of-agglomeration profiles, cluster
  * zones (agglomerations, road-section corridors, custom polygons),
- * boundary search and "test a point". Contract: api/docs/spec-module6-clustering.md.
+ * boundary search and "test a point". Contract: docs/spec-module6-clustering.md.
  */
 import { request } from "@/lib/auth-api"
 

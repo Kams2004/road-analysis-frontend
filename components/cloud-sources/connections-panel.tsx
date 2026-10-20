@@ -6,7 +6,7 @@
  * sync, enable/disable and remove. "Add a source" picks a provider among
  * those with a working flow: a drive starts the OAuth consent; an SFTP
  * server is a profile (host, port, user, base path, password key — the
- * password itself lives in api/secrets/sftp.env). SFTP cards show the live
+ * password itself lives in infra/secrets/sftp.env). SFTP cards show the live
  * link state with Connect / Reconnect / Disconnect / Edit / Forget host key.
  */
 import { useEffect, useState } from "react"

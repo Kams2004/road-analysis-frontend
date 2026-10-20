@@ -3,7 +3,7 @@
 /**
  * Stream sources (RRAP-07-003 / 07-011): live feeds captured in segments by
  * the worker; each segment becomes a job (source_type=stream).
- * Contract: api/docs/spec-module7-jobs.md §4.
+ * Contract: docs/spec-module7-jobs.md §4.
  */
 import { Fragment, useCallback, useEffect, useState } from "react"
 import Link from "next/link"

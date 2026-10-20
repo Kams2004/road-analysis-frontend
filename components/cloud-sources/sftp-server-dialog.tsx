@@ -3,7 +3,7 @@
 /**
  * Add / edit an SFTP server (cloud sources). Host, port, username, base path
  * and the *password key* only: the password itself goes in the secrets file
- * api/secrets/sftp.env as SFTP_PASSWORD_<KEY>=… — never in this form.
+ * infra/secrets/sftp.env as SFTP_PASSWORD_<KEY>=… — never in this form.
  */
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -63,7 +63,7 @@ export function SftpServerForm({ value, onChange, idPrefix = "sftp" }: {
           <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
             {t(`${S}.sftp.passwordHintA`)}{" "}
-            <code className="rounded bg-background/70 px-1 font-mono">api/secrets/sftp.env</code>{" "}
+            <code className="rounded bg-background/70 px-1 font-mono">infra/secrets/sftp.env</code>{" "}
             {t(`${S}.sftp.passwordHintB`)}{" "}
             <code className="rounded bg-background/70 px-1 font-mono">SFTP_PASSWORD_{key}=…</code>{" "}
             {t(`${S}.sftp.passwordHintC`)}

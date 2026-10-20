@@ -1,7 +1,7 @@
 /**
  * Typed client for Module 6 — hazard validation, hazards (persisted
  * clusters), cluster areas and validation settings.
- * Contract: api/docs/spec-module6-hazard-validation.md §7.
+ * Contract: docs/spec-module6-hazard-validation.md §7.
  *
  * Errors are thrown as ApiError (see lib/auth-api.ts) so screens can use
  * errorText(t, err, "m6") to translate `{code}` values such as

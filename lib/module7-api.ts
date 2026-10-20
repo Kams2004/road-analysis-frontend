@@ -1,7 +1,7 @@
 /**
  * Typed client for Module 7 — ingestion & processing jobs, stream sources,
  * cloud storage connections and the `processing` / `cloud` settings sections.
- * Contract: api/docs/spec-module7-jobs.md §1–6.
+ * Contract: docs/spec-module7-jobs.md §1–6.
  *
  * Errors are thrown as ApiError (see lib/auth-api.ts) so screens can use
  * errorText(t, err, "m7.jobs") to translate `{code}` values such as
@@ -311,7 +311,7 @@ export interface SftpInfo {
   username: string
   base_path: string | null
   password_key: string
-  /** Line to set in api/secrets/sftp.env (the value is never shown). */
+  /** Line to set in infra/secrets/sftp.env (the value is never shown). */
   password_var: string
   credentials: "password" | "key" | null
   host_key_fingerprint: string | null
