@@ -98,6 +98,7 @@ export function DetectionImageViewer({ items, index, onIndexChange, onClose }: {
                 alt={item.title}
                 bbox={shown === "frame" ? item.bbox : null}
                 keyboard
+                expandable={false}
                 imgClassName="max-h-[72vh]"
               />
             </div>

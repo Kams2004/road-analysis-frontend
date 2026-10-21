@@ -16,6 +16,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Topbar } from "@/components/topbar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { LightboxTrigger } from "@/components/image-lightbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -602,7 +603,9 @@ function DetectionPanel({ item, initialMode, reasonLabel, onDecided, onChanged, 
               <div>
                 <p className="mb-1 text-xs font-medium text-muted-foreground">{t("pmap.val.crop")}</p>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={crop} alt={t("pmap.val.crop")} className="h-28 max-w-[10rem] rounded-lg bg-muted object-contain" />
+                <LightboxTrigger item={{ src: crop, title: t("pmap.val.crop") }} className="rounded-lg">
+                  <img src={crop} alt={t("pmap.val.crop")} className="h-28 max-w-[10rem] rounded-lg bg-muted object-contain" />
+                </LightboxTrigger>
               </div>
             )}
             {clip && (

@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Topbar } from "@/components/topbar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { LightboxTrigger } from "@/components/image-lightbox"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -449,9 +450,11 @@ export default function SignalementsPage() {
                   >
                     <TableCell className="py-1.5 pl-4">
                       {img ? (
-                        <div className="relative h-7 w-10 overflow-hidden rounded bg-muted">
-                          <Image src={img} alt="" fill className="object-cover" unoptimized />
-                        </div>
+                        <LightboxTrigger item={{ src: img, title: typeLabel(s.type) }} className="rounded">
+                          <div className="relative h-7 w-10 overflow-hidden rounded bg-muted">
+                            <Image src={img} alt="" fill className="object-cover" unoptimized />
+                          </div>
+                        </LightboxTrigger>
                       ) : (
                         <div className="flex h-7 w-10 items-center justify-center rounded bg-muted">
                           <ImageIcon className="h-3.5 w-3.5 text-muted-foreground/50" />
@@ -575,15 +578,17 @@ export default function SignalementsPage() {
 
                 {/* Image */}
                 {resolveMinioUrl(selected.image_url) ? (
-                  <div className="relative aspect-video rounded-lg overflow-hidden bg-muted">
-                    <Image
-                      src={resolveMinioUrl(selected.image_url)!}
-                      alt="signalement"
-                      fill
-                      className="object-cover"
-                      unoptimized
-                    />
-                  </div>
+                  <LightboxTrigger item={{ src: resolveMinioUrl(selected.image_url), title: typeLabel(selected.type) }} className="w-full rounded-lg">
+                    <div className="relative aspect-video rounded-lg overflow-hidden bg-muted">
+                      <Image
+                        src={resolveMinioUrl(selected.image_url)!}
+                        alt="signalement"
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
+                    </div>
+                  </LightboxTrigger>
                 ) : (
                   <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
                     <ImageIcon className="h-12 w-12 text-muted-foreground/40" />

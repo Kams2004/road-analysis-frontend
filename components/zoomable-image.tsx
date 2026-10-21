@@ -6,10 +6,12 @@
  *
  * Zoom: buttons, mouse wheel (towards the cursor), keyboard (+ / − / 0 when
  * `keyboard` is set), double-click (zoom to the box, or ×2 at the cursor;
- * double-click again resets). Drag to pan once zoomed.
+ * double-click again resets). Drag to pan once zoomed. The "full screen"
+ * button opens the in-app lightbox (never a new browser tab).
  */
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Crosshair, ExternalLink, ImageIcon, Maximize, Minimize2, Minus, Plus, ScanSearch } from "lucide-react"
+import { Crosshair, ImageIcon, Maximize, Minimize2, Minus, Move, Plus, ScanSearch } from "lucide-react"
+import { useImageLightbox } from "@/components/image-lightbox"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
@@ -39,6 +41,8 @@ type ZoomableImageProps = {
   className?: string
   /** Show the box toggle + hint line under the image. */
   footer?: boolean
+  /** Show the "full screen" button (opens the in-app lightbox). Off inside the lightbox itself. */
+  expandable?: boolean
 }
 
 /** A new image starts fitted (fresh zoom / pan / size state per src). */
@@ -47,9 +51,10 @@ export function ZoomableImage(props: ZoomableImageProps) {
 }
 
 function ZoomableImageInner({
-  src, alt, bbox = null, keyboard = false, imgClassName, className, footer = true,
+  src, alt, bbox = null, keyboard = false, imgClassName, className, footer = true, expandable = true,
 }: ZoomableImageProps) {
   const t = useT()
+  const lightbox = useImageLightbox()
   const boxRef = useRef<HTMLDivElement>(null)
   const innerRef = useRef<HTMLDivElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
@@ -127,6 +132,10 @@ function ZoomableImageInner({
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName
       if (tag === "INPUT" || tag === "TEXTAREA" || e.ctrlKey || e.metaKey || e.altKey) return
+      // Only the viewer of the topmost dialog reacts (e.g. lightbox over an evidence dialog).
+      const dialogs = document.querySelectorAll('[role="dialog"]')
+      const top = dialogs[dialogs.length - 1]
+      if (top && boxRef.current && !top.contains(boxRef.current)) return
       if (e.key === "+" || e.key === "=") { e.preventDefault(); zoomBy(1.4) }
       else if (e.key === "-" || e.key === "_") { e.preventDefault(); zoomBy(1 / 1.4) }
       else if (e.key === "0") { e.preventDefault(); reset() }
@@ -148,7 +157,7 @@ function ZoomableImageInner({
     { Icon: Minimize2, label: `${t("ht.ev.fit")} (0)`, on: reset, off: zoom === 1 },
     { Icon: ScanSearch, label: t("ht.ev.actual"), on: actualSize, off: !size },
     ...(hasBox ? [{ Icon: Crosshair, label: t("ht.ev.zoomBox"), on: zoomToBox, off: !size }] : []),
-    { Icon: Maximize, label: t("pmap.val.fullScreen"), on: () => window.open(src, "_blank"), off: false },
+    ...(expandable ? [{ Icon: Maximize, label: t("pmap.val.fullScreen"), on: () => lightbox.open({ src, title: alt, bbox }), off: false }] : []),
   ]
   return (
     <div className={cn("space-y-1.5", className)}>
@@ -209,7 +218,7 @@ function ZoomableImageInner({
               <span className="font-mono">[{Math.round(bbox.x1)}, {Math.round(bbox.y1)}, {Math.round(bbox.x2)}, {Math.round(bbox.y2)}]</span>
             </label>
           ) : <span />}
-          <span className="flex items-center gap-1"><ExternalLink className="h-3 w-3" />{t(keyboard ? "ht.ev.zoomHintKeys" : "ht.ev.zoomHintWheel")}</span>
+          <span className="flex items-center gap-1"><Move className="h-3 w-3" />{t(keyboard ? "ht.ev.zoomHintKeys" : "ht.ev.zoomHintWheel")}</span>
         </div>
       )}
     </div>

@@ -4,6 +4,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { I18nProvider } from '@/lib/i18n'
 import { AuthProvider } from '@/components/auth-provider'
 import { Toaster } from '@/components/ui/sonner'
+import { ImageLightboxProvider } from '@/components/image-lightbox'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -44,7 +45,9 @@ export default function RootLayout({
         >
           <I18nProvider>
             <AuthProvider>
-              {children}
+              <ImageLightboxProvider>
+                {children}
+              </ImageLightboxProvider>
               <Toaster richColors position="top-right" />
             </AuthProvider>
           </I18nProvider>

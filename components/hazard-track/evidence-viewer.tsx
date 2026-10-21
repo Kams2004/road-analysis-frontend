@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react"
 import { BrainCircuit, ChevronLeft, ChevronRight, Loader2, Video } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { LightboxTrigger } from "@/components/image-lightbox"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { VideoPlayer } from "@/components/video-player"
 import { AiBadges, VerifierScore } from "@/components/ai-badges"
@@ -131,8 +132,10 @@ function EvidenceBody({ id, siblings, onNavigate, onOpenCluster }: {
           )}
           {d.crop_url && (
             <div className="flex items-center gap-3 rounded-lg border p-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={resolveMinioUrl(d.crop_url) ?? ""} alt="" className="h-16 w-16 rounded object-cover" />
+              <LightboxTrigger item={{ src: resolveMinioUrl(d.crop_url), title: t("ht.ev.crop") }} className="rounded">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={resolveMinioUrl(d.crop_url) ?? ""} alt="" className="h-16 w-16 rounded object-cover" />
+              </LightboxTrigger>
               <p className="text-xs text-muted-foreground">{t("ht.ev.crop")}</p>
             </div>
           )}

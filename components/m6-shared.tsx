@@ -10,6 +10,7 @@ import {
   ArrowDown, ArrowUp, ArrowUpDown, Bot, ChevronLeft, ChevronRight, ImageIcon, Maximize, User,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { useImageLightbox } from "@/components/image-lightbox"
 import { Button } from "@/components/ui/button"
 import { TableHead } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
@@ -93,25 +94,40 @@ export function ConfidenceBar({ value }: { value: number }) {
   )
 }
 
+/** Small thumbnail; clicking it opens the in-app lightbox (not the row). */
 export function Thumb({ url, className }: { url: string | null; className?: string }) {
   const src = resolveMinioUrl(url)
+  const lightbox = useImageLightbox()
+  const { t } = useI18n()
+  if (!src) {
+    return (
+      <div className={cn("relative h-12 w-16 overflow-hidden rounded bg-muted", className)}>
+        <div className="flex h-full items-center justify-center"><ImageIcon className="h-4 w-4 text-muted-foreground" /></div>
+      </div>
+    )
+  }
   return (
-    <div className={cn("relative h-12 w-16 overflow-hidden rounded bg-muted", className)}>
-      {src
-        // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" />
-        : <div className="flex h-full items-center justify-center"><ImageIcon className="h-4 w-4 text-muted-foreground" /></div>}
-    </div>
+    <button type="button" title={t("pmap.map.openImage")} aria-label={t("pmap.map.openImage")}
+      onClick={(e) => { e.stopPropagation(); lightbox.open({ src }) }}
+      className={cn("relative block h-12 w-16 cursor-zoom-in overflow-hidden rounded bg-muted ring-primary/50 hover:ring-2", className)}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" />
+    </button>
   )
 }
 
 /** Annotated frame with the detection's bounding box (pixel coords) overlaid. */
 export function EvidenceFrame({ d }: { d: Pick<M6Detection, "image_url" | "bbox_x1" | "bbox_y1" | "bbox_x2" | "bbox_y2"> }) {
   const { t } = useI18n()
+  const lightbox = useImageLightbox()
   const src = resolveMinioUrl(d.image_url)
   const [size, setSize] = useState<{ w: number; h: number } | null>(null)
   const [showBox, setShowBox] = useState(true)
   const hasBox = d.bbox_x1 != null && d.bbox_y1 != null && d.bbox_x2 != null && d.bbox_y2 != null
+  const openFull = () => lightbox.open({
+    src, title: t("m6.ev.frame"),
+    bbox: hasBox && showBox ? { x1: d.bbox_x1!, y1: d.bbox_y1!, x2: d.bbox_x2!, y2: d.bbox_y2! } : null,
+  })
   if (!src) {
     return (
       <div className="flex aspect-video items-center justify-center rounded-lg bg-muted">
@@ -128,7 +144,8 @@ export function EvidenceFrame({ d }: { d: Pick<M6Detection, "image_url" | "bbox_
           <img
             src={src}
             alt={t("m6.ev.frame")}
-            className="block max-h-[22rem] w-auto max-w-full"
+            onClick={() => openFull()}
+            className="block max-h-[22rem] w-auto max-w-full cursor-zoom-in"
             onLoad={(e) => setSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
           />
           {hasBox && size && showBox && (
@@ -145,7 +162,7 @@ export function EvidenceFrame({ d }: { d: Pick<M6Detection, "image_url" | "bbox_
         </div>
         <button
           type="button"
-          onClick={() => window.open(src, "_blank")}
+          onClick={() => openFull()}
           className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg bg-black/50 text-white opacity-0 transition-opacity hover:bg-black/70 group-hover:opacity-100 focus:opacity-100"
           title={t("pmap.val.fullScreen")}
           aria-label={t("pmap.val.fullScreen")}

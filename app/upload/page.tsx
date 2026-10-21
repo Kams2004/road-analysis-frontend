@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
+import { LightboxTrigger } from "@/components/image-lightbox"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -466,8 +467,7 @@ export default function UploadPage() {
                         {staged.map((s) => (
                           <div key={s.id} className="group relative overflow-hidden rounded-lg border border-border bg-muted/30">
                             {s.isImage
-                              // eslint-disable-next-line @next/next/no-img-element
-                              ? <img src={s.previewUrl} alt={s.file.name} className="h-32 w-full object-cover" />
+                              ? <LightboxTrigger item={{ src: s.previewUrl, title: s.file.name }} className="w-full"><img src={s.previewUrl} alt={s.file.name} className="h-32 w-full object-cover" /></LightboxTrigger>
                               : <video src={s.previewUrl} className="h-32 w-full object-cover" controls preload="metadata" />
                             }
                             <div className="flex items-center justify-between gap-2 px-3 py-1.5">
@@ -558,12 +558,14 @@ export default function UploadPage() {
                       <TableRow key={det.id} className="h-11">
                         <TableCell className="py-1.5 pl-4">
                           {det.crop_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={resolveMinioUrl(det.crop_url) ?? ""}
-                              alt={t("ops.upload.cropAlt")}
-                              className="h-7 w-10 shrink-0 rounded object-cover"
-                            />
+                            <LightboxTrigger item={{ src: resolveMinioUrl(det.crop_url), title: t("ops.upload.cropAlt") }} className="rounded">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={resolveMinioUrl(det.crop_url) ?? ""}
+                                alt={t("ops.upload.cropAlt")}
+                                className="h-7 w-10 shrink-0 rounded object-cover"
+                              />
+                            </LightboxTrigger>
                           ) : (
                             <div className="flex h-7 w-10 shrink-0 items-center justify-center rounded bg-muted">
                               <ImageIcon className="h-3.5 w-3.5 text-muted-foreground/50" />
