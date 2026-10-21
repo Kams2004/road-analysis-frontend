@@ -12,9 +12,8 @@
  *
  * plus the flat "All detections" list and the recurring spots, as separate
  * views. Places are shown as reverse-geocoded street · quartier, town;
- * coordinates are secondary. Only confirmed hazards (active / resolved) are
- * shown: candidate clusters are reviewed in Validations. Deep links:
- * ?tab=active|resolved|detections|recurring, ?job_id=<job> (All detections of a job), ?hazard=<id>,
+ * coordinates are secondary. Deep links: ?tab=active|resolved|detections|
+ * recurring, ?job_id=<job> (All detections of a job), ?hazard=<id>,
  * ?detection=<id>. Resolve / Reopen need detections:edit; the rejected-data
  * export needs datasets:view. Components: components/hazard-track/*.
  */
@@ -39,9 +38,7 @@ import { RecurringSpotsView } from "@/components/hazard-recurring-spots"
 import { PageHeader } from "@/components/page-header"
 import { StatCard, type Tone } from "@/components/stat-card"
 import { DataCard } from "@/components/data-toolbar"
-import {
-  CLUSTER_STATUSES, ClusterList, EMPTY_CLUSTER_FILTERS, placeQuery, type ClusterFilters, type ClusterStatus,
-} from "@/components/hazard-track/cluster-list"
+import { ClusterList, EMPTY_CLUSTER_FILTERS, placeQuery, type ClusterFilters, type ClusterStatus } from "@/components/hazard-track/cluster-list"
 import { ClusterMap } from "@/components/hazard-track/cluster-map"
 import { ClusterDetail } from "@/components/hazard-track/cluster-detail"
 import { EvidenceViewer } from "@/components/hazard-track/evidence-viewer"
@@ -55,9 +52,8 @@ import {
   type Hazard, type HazardDetail, type HazardPlace,
 } from "@/lib/module6-api"
 
-type Tab = ClusterStatus | "detections" | "recurring"
-const TABS: Tab[] = [...CLUSTER_STATUSES, "detections", "recurring"]
-const isClusterTab = (t: Tab): t is ClusterStatus => (CLUSTER_STATUSES as string[]).includes(t)
+type Tab = "active" | "resolved" | "detections" | "recurring"
+const TABS: Tab[] = ["active", "resolved", "detections", "recurring"]
 const asTab = (v: string | null): Tab | null => (v && (TABS as string[]).includes(v) ? (v as Tab) : null)
 const MAP_LIMIT = 200
 
@@ -93,9 +89,7 @@ function HazardTrack() {
   const [exporting, setExporting] = useState<"csv" | "json" | null>(null)
 
   // Cluster explorer state
-  const [lastClusterTab, setLastClusterTab] = useState<ClusterStatus>(isClusterTab(tab) ? tab : "active")
-  useEffect(() => { if (isClusterTab(tab)) setLastClusterTab(tab) }, [tab])
-  const clusterStatus: ClusterStatus = isClusterTab(tab) ? tab : lastClusterTab
+  const clusterStatus: ClusterStatus = tab === "resolved" ? "resolved" : "active"
   const [filters, setFilters] = useState<ClusterFilters>(EMPTY_CLUSTER_FILTERS)
   const debounced = useDebounced(filters)
   const [sort, setSort] = useState("-last_detected_at")
@@ -150,10 +144,9 @@ function HazardTrack() {
   }, [replaceParams])
   const openCluster = (id: string) => {
     setDetectionId(null)
-    const next: ClusterStatus = isClusterTab(tab) ? tab : lastClusterTab
-    if (!isClusterTab(tab)) setTab(next)
+    if (tab !== "active" && tab !== "resolved") setTab("active")
     setSelectedId(id)
-    replaceParams({ tab: next === "active" ? null : next, hazard: id, detection: null })
+    replaceParams({ tab: tab === "resolved" ? "resolved" : null, hazard: id, detection: null })
   }
   const openDetection = useCallback((id: string, ids: string[] | null) => {
     setDetectionId(id)
@@ -198,11 +191,9 @@ function HazardTrack() {
       search: f.search.trim() || undefined,
       resolution_source: clusterStatus === "resolved" ? f.resolution : undefined,
       recurring_spot: f.recurring === "yes" ? true : f.recurring === "no" ? false : undefined,
-      has_pending: clusterStatus === "active"
-        ? (f.pending === "yes" ? true : f.pending === "no" ? false : undefined) : undefined,
     }
   }, [debounced, clusterStatus])
-  const isClusters = isClusterTab(tab)
+  const isClusters = tab === "active" || tab === "resolved"
 
   useEffect(() => {
     if (!isClusters) return
@@ -306,7 +297,7 @@ function HazardTrack() {
               <div className="inline-flex rounded-xl border bg-card p-1 shadow-sm" role="tablist" aria-label={t("ht.view.label")}>
                 {views.map(({ key, label, Icon }) => (
                   <button key={key} type="button" role="tab" aria-selected={view === key}
-                    onClick={() => switchTab(key === "clusters" ? clusterStatus : key)}
+                    onClick={() => switchTab(key === "clusters" ? (tab === "resolved" ? "resolved" : "active") : key)}
                     className={cn("inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
                       view === key ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
                     <Icon className="h-4 w-4" />{label}

@@ -11,7 +11,6 @@ import { resolveMinioUrl } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { Hazard } from "@/lib/module6-api"
 import { ExpiresText, RecurringBadge, ResolutionSourceBadge, useHzlLabels } from "@/components/hazard-lifecycle"
-import { pendingOf, useMemberCountsText } from "@/components/cluster-review"
 import { placeParts, typeMeta, TypeTile, ZoneBadge } from "./shared"
 
 export const ClusterCard = forwardRef<HTMLButtonElement, {
@@ -27,9 +26,7 @@ export const ClusterCard = forwardRef<HTMLButtonElement, {
   const meta = typeMeta(h.type)
   const place = placeParts(h)
   const cover = resolveMinioUrl(h.cover_crop_url ?? h.cover_image_url ?? null)
-  const memberText = useMemberCountsText()
   const active = h.status === "active"
-  const toReview = pendingOf(h)
   const seen = h.last_seen_at ?? h.last_detected_at
   return (
     <button
@@ -83,8 +80,6 @@ export const ClusterCard = forwardRef<HTMLButtonElement, {
           {place.secondary && <p className="truncate text-xs text-muted-foreground">{place.secondary}</p>}
         </div>
 
-        {h.member_counts && <p className="truncate text-[11px] text-muted-foreground">{memberText(h)}</p>}
-
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
           {seen && (
             <span className="inline-flex items-center gap-1" title={L.fmtDate(seen)}>
@@ -104,13 +99,8 @@ export const ClusterCard = forwardRef<HTMLButtonElement, {
           )}
         </div>
 
-        {(h.recurring_spot || h.resolution_source || !!h.absence_count || h.cluster_zone_name || h.cluster_environment || (active && toReview > 0)) && (
+        {(h.recurring_spot || h.resolution_source || !!h.absence_count || h.cluster_zone_name || h.cluster_environment) && (
           <div className="flex flex-wrap items-center gap-1 pt-0.5">
-            {active && toReview > 0 && (
-              <span className="rounded-full bg-orange-500/10 px-1.5 py-0.5 text-[10px] font-medium text-orange-700 ring-1 ring-inset ring-orange-500/25 dark:text-orange-400">
-                {t("cr.card.toReview", { n: toReview })}
-              </span>
-            )}
             {h.recurring_spot && <RecurringBadge count={h.recurrence_count} />}
             {!active && h.resolution_source && <ResolutionSourceBadge source={h.resolution_source} />}
             {active && !!h.absence_count && (

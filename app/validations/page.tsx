@@ -5,16 +5,8 @@
  * Pending review, Location review, Rejected — server-side filters and
  * pagination, and a side panel with the evidence, location, cluster preview,
  * history and the Accept / Correct / Reject / Reopen actions.
- *
- * Cluster-first review: with "Group by cluster" (default ON, remembered in
- * localStorage) the Pending tab lists one card per hazard with unreviewed
- * detections (Accept / Reject cluster, open the members individually), then
- * the detections that belong to no hazard yet. `?hazard=<id>` focuses the
- * queue on the unreviewed detections of one cluster.
  */
 import { useCallback, useEffect, useId, useState } from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
   AlertTriangle, CheckCircle, Clock, Edit2, Eye, Layers, Loader2, MapPin, Plus, RotateCcw,
@@ -26,7 +18,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -52,18 +43,15 @@ import {
 } from "@/lib/api"
 import {
   DETECTION_TYPES, FINAL_STATUSES, SUBTYPES,
-  acceptDetection, correctDetection, getDetection, getHazard, getQueue, listRejected, rejectDetection, reopenDetection,
-  type DetectionDetail, type Hazard, type M6Detection,
+  acceptDetection, correctDetection, getDetection, getQueue, listRejected, rejectDetection, reopenDetection,
+  type DetectionDetail, type M6Detection,
 } from "@/lib/module6-api"
-import { ClusterDecisionButtons, HazardStatusBadge, MemberCountsLine } from "@/components/cluster-review"
-import { ClusterQueue } from "@/components/validations/cluster-queue"
 import { AiBadges, AiReasonBadge, VerifierScore } from "@/components/ai-badges"
 import { AiDetailsBadges, AiReasoningPanel } from "@/components/ai-reasoning"
 import { SignPicker } from "@/components/sign-picker"
 import { KIND_BADGE, kindOf } from "@/components/settings/hazards/rejection-reasons"
 
 const PAGE_SIZE = 20
-const GROUP_KEY = "rr_validations_group_by_cluster"
 type Tab = "pending" | "location" | "rejected"
 
 interface Filters {
@@ -115,47 +103,6 @@ export default function ValidationsPage() {
   const [reasons, setReasons] = useState<RejectionReason[]>([])
   const [selected, setSelected] = useState<M6Detection | null>(null)
   const [initialMode, setInitialMode] = useState<Mode>("idle")
-  /** Items the panel moves through after a decision (table page or a cluster's members). */
-  const [panelList, setPanelList] = useState<M6Detection[]>([])
-  const router = useRouter()
-
-  // Cluster-first grouping (remembered per browser).
-  const [grouped, setGroupedState] = useState(true)
-  useEffect(() => {
-    try { const v = localStorage.getItem(GROUP_KEY); if (v != null) setGroupedState(v === "1") } catch { /* storage unavailable */ }
-  }, [])
-  const setGrouped = (v: boolean) => {
-    setGroupedState(v)
-    setPage(1)
-    try { localStorage.setItem(GROUP_KEY, v ? "1" : "0") } catch { /* storage unavailable */ }
-  }
-  const [unclustered, setUnclustered] = useState<number | null>(null)
-
-  // ?hazard=<id>: the queue focused on one cluster.
-  const [focusId, setFocusId] = useState<string | null>(null)
-  const [focusHz, setFocusHz] = useState<Hazard | null>(null)
-  useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("hazard")
-    if (id) { setFocusId(id); setTab("pending") }
-  }, [])
-  const focus = (id: string | null, hz: Hazard | null = null) => {
-    setFocusId(id)
-    setFocusHz(hz)
-    setPage(1)
-    if (id) setTab("pending")
-    const p = new URLSearchParams(window.location.search)
-    if (id) p.set("hazard", id); else p.delete("hazard")
-    const q = p.toString()
-    router.replace(q ? `/validations?${q}` : "/validations", { scroll: false })
-  }
-  useEffect(() => {
-    if (!focusId) { setFocusHz(null); return }
-    let alive = true
-    // Candidates are not hazards (404 on /hazards/{id}): keep the queue's copy then.
-    getHazard(focusId).then((h) => { if (alive) setFocusHz(h) }).catch(() => { /* candidate cluster */ })
-    return () => { alive = false }
-  }, [focusId, reload]) // eslint-disable-line react-hooks/exhaustive-deps
-  const showClusters = grouped && tab === "pending" && !focusId
 
   const setF = (k: keyof Filters, v: string) => { setFilters((f) => ({ ...f, [k]: v })); setPage(1) }
   const refresh = useCallback(() => setReload((n) => n + 1), [])
@@ -194,8 +141,6 @@ export default function ValidationsPage() {
       : getQueue({
           ...common,
           status: tab === "pending" ? "pending" : "location_pending",
-          hazard_id: focusId ?? undefined,
-          clustered: showClusters ? false : undefined,
           min_confidence: f.minConf === "all" ? undefined : Number(f.minConf),
           audit_sample: f.ai === "audit" ? true : undefined,
           ai_decision: f.ai === "all" || f.ai === "audit" ? undefined : f.ai,
@@ -209,19 +154,14 @@ export default function ValidationsPage() {
       .catch((err) => { if (alive) { setError(errorText(t, err, "m6")); setItems([]); setTotal(0) } })
       .finally(() => alive && setLoading(false))
     return () => { alive = false }
-  }, [tab, page, pageSize, sort, debounced, reload, focusId, showClusters]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tab, page, pageSize, sort, debounced, reload]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const open = (d: M6Detection, mode: Mode = "idle", list: M6Detection[] = items) => {
-    setInitialMode(mode)
-    setPanelList(list)
-    setSelected(d)
-  }
+  const open = (d: M6Detection, mode: Mode = "idle") => { setInitialMode(mode); setSelected(d) }
 
-  /** After a decision: refresh and move on to the next item of the page (or of the cluster). */
+  /** After a decision: refresh and move on to the next item of the page. */
   const afterDecision = (id: string) => {
-    const list = panelList.length ? panelList : items
-    const idx = list.findIndex((x) => x.id === id)
-    const next = idx < 0 ? null : list.slice(idx + 1).find((x) => x.id !== id) ?? null
+    const idx = items.findIndex((x) => x.id === id)
+    const next = items.slice(idx + 1).find((x) => x.id !== id) ?? null
     setSelected(next)
     setInitialMode("idle")
     refresh()
@@ -277,49 +217,7 @@ export default function ValidationsPage() {
                   </TabsList>
                 </Tabs>
                 <p className="text-xs text-muted-foreground">{t(`m6.tab.${tab}Hint`)}</p>
-                {tab === "pending" && !focusId && (
-                  <div className="ml-auto flex items-center gap-2" title={t("cr.group.hint")}>
-                    <Switch id="v-group" checked={grouped} onCheckedChange={setGrouped} />
-                    <Label htmlFor="v-group" className="cursor-pointer text-sm">{t("cr.group.label")}</Label>
-                  </div>
-                )}
               </div>
-
-              {focusId && isQueue && (
-                <div className="flex flex-wrap items-center gap-3 border-b bg-primary/5 px-4 py-3">
-                  <Layers className="h-4 w-4 text-primary" />
-                  <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                      {t("cr.focus.title", { code: focusHz?.code ?? focusId.slice(0, 8) })}
-                      {focusHz && <span className="text-muted-foreground">{L.typeLabel(focusHz.type)}</span>}
-                      {focusHz && <HazardStatusBadge status={focusHz.status} className="text-[10px]" />}
-                    </p>
-                    {focusHz && <MemberCountsLine h={focusHz} />}
-                  </div>
-                  {focusHz && canEdit && (focusHz.status === "candidate" || focusHz.status === "active") && (
-                    <ClusterDecisionButtons hazard={focusHz} onDone={() => { refresh(); setSelected(null) }} />
-                  )}
-                  {focusHz && focusHz.status !== "candidate" && (
-                    <Button size="sm" variant="ghost" asChild>
-                      <Link href={`/detections?hazard=${focusId}`}>{t("cr.q.openTrack")}</Link>
-                    </Button>
-                  )}
-                  <Button size="sm" variant="outline" onClick={() => focus(null)}>{t("cr.focus.clear")}</Button>
-                </div>
-              )}
-
-              {showClusters && (
-                <ClusterQueue
-                  type={debounced.type}
-                  search={debounced.search}
-                  reloadKey={reload}
-                  canEdit={canEdit}
-                  onOpenDetection={(d, list) => open(d, "idle", list)}
-                  onDecided={() => { refresh(); setSelected(null) }}
-                  onUnclustered={setUnclustered}
-                  onFocus={(h) => focus(h.id, h)}
-                />
-              )}
 
               {/* Filters */}
               <DataToolbar
@@ -406,16 +304,6 @@ export default function ValidationsPage() {
                   <Input id="v-to" type="date" className="h-9 w-36" value={filters.dateTo} onChange={(e) => setF("dateTo", e.target.value)} />
                 </div>
               </DataToolbar>
-
-              {showClusters && (
-                <div className="px-4 pt-3">
-                  <h2 className="flex items-center gap-2 text-sm font-semibold">
-                    {t("cr.unclustered.title")}
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">{unclustered ?? total}</span>
-                  </h2>
-                  <p className="text-xs text-muted-foreground">{t("cr.unclustered.hint")}</p>
-                </div>
-              )}
 
               {error && <p className="px-4 pt-3 text-sm text-destructive">{error}</p>}
 
@@ -570,18 +458,16 @@ export default function ValidationsPage() {
 
 function ClusterHintText({ d }: { d: M6Detection }) {
   const { t } = useM6Labels()
-  const code = d.cluster?.hazard_code ?? d.hazard_code
-  if (code) {
+  if (d.location_status !== "confirmed") return <span className="text-muted-foreground">—</span>
+  if (d.cluster) {
     return (
-      <span className="inline-flex flex-wrap items-center gap-1">
+      <span className="inline-flex items-center gap-1">
         <Layers className="h-3.5 w-3.5 text-primary" />
-        {d.cluster ? t("cr.cluster.belongs", { code, n: d.cluster.detection_count }) : code}
-        <HazardStatusBadge status={d.cluster?.status ?? d.hazard_status} className="text-[10px]" />
+        {t("m6.cluster.joins", { code: d.cluster.hazard_code, n: d.cluster.detection_count })}
       </span>
     )
   }
-  if (d.location_status !== "confirmed") return <span className="text-muted-foreground">—</span>
-  return <span className="text-muted-foreground">{t("cr.cluster.none")}</span>
+  return <span className="text-muted-foreground">{t("m6.cluster.new")}</span>
 }
 
 // ── Detail panel ─────────────────────────────────────────────────────────────
@@ -812,39 +698,28 @@ function DetectionPanel({ item, initialMode, reasonLabel, onDecided, onChanged, 
             onSaved={() => { setMode("idle"); load(); onChanged() }} />
         )}
 
-        {/* Cluster: a confirmed hazard (HZ- code) or a candidate cluster (CL- code, from the queue's `cluster`) */}
-        {(() => {
-          const hzStatus = cur.hazard?.status ?? cur.hazard_status ?? cluster?.status ?? null
-          const candidate = hzStatus === "candidate"
-          const confirmed = hzStatus === "active" || hzStatus === "resolved"
-          // hazard_code is null for candidate members: the CL- code comes from the queue item's cluster.
-          const code = cur.hazard_code ?? cluster?.hazard_code ?? cur.hazard?.code ?? null
-          const count = cur.hazard?.detection_count ?? cluster?.detection_count ?? null
-          const hazardId = cur.hazard?.id ?? cur.hazard_id ?? cluster?.hazard_id ?? null
-          return (
-            <section className="flex items-start gap-3 rounded-lg border p-4">
-              <Layers className="mt-0.5 h-4 w-4 text-primary" />
-              <div className="text-sm">
-                <p className="font-medium">{t("m6.col.cluster")}</p>
-                {code ? (
-                  <p className="flex flex-wrap items-center gap-1.5">
-                    {candidate ? t("cr.cluster.candidateMember", { code }) : t("m6.cluster.member", { code })}
-                    <HazardStatusBadge status={hzStatus} className="text-[10px]" />
-                    {count != null && <span className="text-muted-foreground">· {t("m6.cluster.count", { n: count })}</span>}
-                  </p>
-                ) : (
-                  <p className="text-muted-foreground">{cur.location_status === "confirmed" ? t("cr.cluster.none") : t("m6.cluster.afterLocation")}</p>
-                )}
-                {candidate && <p className="mt-1 text-xs text-muted-foreground">{t("cr.cluster.candidateHint")}</p>}
-                {confirmed && hazardId && (
-                  <Link href={`/detections?hazard=${hazardId}`} className="mt-1 inline-block text-xs text-primary hover:underline">
-                    {t("cr.q.openTrack")}
-                  </Link>
-                )}
-              </div>
-            </section>
-          )
-        })()}
+        {/* Cluster */}
+        <section className="flex items-start gap-3 rounded-lg border p-4">
+          <Layers className="mt-0.5 h-4 w-4 text-primary" />
+          <div className="text-sm">
+            <p className="font-medium">{t("m6.col.cluster")}</p>
+            {cur.hazard ? (
+              <p>{t("m6.cluster.member", { code: cur.hazard.code })}
+                {cur.hazard.detection_count != null && <span className="text-muted-foreground"> · {t("m6.cluster.count", { n: cur.hazard.detection_count })}</span>}
+              </p>
+            ) : cur.hazard_code ? (
+              <p>{t("m6.cluster.member", { code: cur.hazard_code })}</p>
+            ) : cur.location_status !== "confirmed" ? (
+              <p className="text-muted-foreground">{t("m6.cluster.afterLocation")}</p>
+            ) : cluster ? (
+              <p>{t("m6.cluster.joins", { code: cluster.hazard_code, n: cluster.detection_count })}</p>
+            ) : cluster === null ? (
+              <p>{t("m6.cluster.new")}</p>
+            ) : (
+              <p className="text-muted-foreground">—</p>
+            )}
+          </div>
+        </section>
 
         {/* Decision info */}
         {status === "rejected" && (
