@@ -13,6 +13,10 @@ export interface TrainingTypeSummary {
   accepted: number
   corrected: number
   rejected: number
+  /** Rejections of kind "unusable": kept in the manifest without files (not trained on). */
+  excluded?: number
+  /** Rejections of kind "real_redundant": filed as positive samples. */
+  redundant_positive?: number
   superseded: number
   by_human: number
   by_system: number

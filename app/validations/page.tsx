@@ -39,7 +39,7 @@ import { TablePagination } from "@/components/table-pagination"
 import { cn } from "@/lib/utils"
 import { errorText } from "@/lib/auth-api"
 import {
-  createRejectionReason, fetchRejectionReasons, resolveMinioUrl, type RejectionReason,
+  createRejectionReason, fetchRejectionReasons, resolveMinioUrl, REJECTION_KINDS, type RejectionKind, type RejectionReason,
 } from "@/lib/api"
 import {
   DETECTION_TYPES, FINAL_STATUSES, SUBTYPES,
@@ -49,6 +49,7 @@ import {
 import { AiBadges, AiReasonBadge, VerifierScore } from "@/components/ai-badges"
 import { AiDetailsBadges, AiReasoningPanel } from "@/components/ai-reasoning"
 import { SignPicker } from "@/components/sign-picker"
+import { KIND_BADGE, kindOf } from "@/components/settings/hazards/rejection-reasons"
 
 const PAGE_SIZE = 20
 type Tab = "pending" | "location" | "rejected"
@@ -503,6 +504,7 @@ function DetectionPanel({ item, initialMode, reasonLabel, onDecided, onChanged, 
   const [reopenReason, setReopenReason] = useState("")
   const [addingReason, setAddingReason] = useState(false)
   const [newReasonLabel, setNewReasonLabel] = useState("")
+  const [newReasonKind, setNewReasonKind] = useState<RejectionKind>("false_positive")
 
   const load = useCallback(() => {
     setLoadError(null)
@@ -556,12 +558,13 @@ function DetectionPanel({ item, initialMode, reasonLabel, onDecided, onChanged, 
     const code = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")
     setBusy(true)
     try {
-      const created = await createRejectionReason({ detection_type: type, code, label, description: label })
+      const created = await createRejectionReason({ detection_type: type, code, label, description: label, kind: newReasonKind })
       setReasons((xs) => [...(xs ?? []), created])
       onReasonAdded(created)
       setReasonCode(created.code)
       setAddingReason(false)
       setNewReasonLabel("")
+      setNewReasonKind("false_positive")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("pmap.val.addReasonFailed"))
     } finally {
@@ -805,26 +808,43 @@ function DetectionPanel({ item, initialMode, reasonLabel, onDecided, onChanged, 
                 </Button>
               )}
             </div>
-            <div className="grid max-h-56 gap-2 overflow-y-auto pr-1" role="radiogroup" aria-label={t("pmap.val.rejectionReason")}>
+            <div className="grid max-h-72 gap-2 overflow-y-auto pr-1" role="radiogroup" aria-label={t("pmap.val.rejectionReason")}>
               {reasons === null ? (
                 <p className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{t("pmap.val.loadingReasons")}</p>
               ) : !reasons.length ? (
                 <p className="py-4 text-center text-sm text-muted-foreground">{t("pmap.val.noReasons")}</p>
-              ) : reasons.map((r) => (
-                <button key={r.id} type="button" role="radio" aria-checked={reasonCode === r.code} onClick={() => setReasonCode(r.code)}
-                  className={cn("flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
-                    reasonCode === r.code ? "border-destructive bg-destructive/10" : "bg-muted/30 hover:border-destructive/50")}>
-                  <span className={cn("mt-0.5 h-4 w-4 shrink-0 rounded-full border-2", reasonCode === r.code ? "border-destructive bg-destructive" : "border-muted-foreground")} />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium">{L.tl(`rej.code.${r.code}`, r.label)}{r.is_custom && <span className="ml-1.5 text-xs text-muted-foreground">{t("pmap.val.custom")}</span>}</span>
-                    {r.description && r.description !== r.label && t(`rej.code.${r.code}`) === `rej.code.${r.code}` && <span className="block text-xs text-muted-foreground">{r.description}</span>}
-                  </span>
-                </button>
-              ))}
+              ) : REJECTION_KINDS.map((k) => {
+                const group = reasons.filter((r) => kindOf(r) === k)
+                if (!group.length) return null
+                return (
+                  <div key={k} className="space-y-1.5" role="group" aria-label={t(`rej.kind.${k}`)}>
+                    <p className="flex items-center gap-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" title={t(`rej.kind.${k}.help`)}>
+                      <span className={cn("h-2 w-2 shrink-0 rounded-full border", KIND_BADGE[k])} />{t(`rej.kind.${k}`)}
+                    </p>
+                    {group.map((r) => (
+                      <button key={r.id} type="button" role="radio" aria-checked={reasonCode === r.code} onClick={() => setReasonCode(r.code)}
+                        className={cn("flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
+                          reasonCode === r.code ? "border-destructive bg-destructive/10" : "bg-muted/30 hover:border-destructive/50")}>
+                        <span className={cn("mt-0.5 h-4 w-4 shrink-0 rounded-full border-2", reasonCode === r.code ? "border-destructive bg-destructive" : "border-muted-foreground")} />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium">{L.tl(`rej.code.${r.code}`, r.label)}{r.is_custom && <span className="ml-1.5 text-xs text-muted-foreground">{t("pmap.val.custom")}</span>}</span>
+                          {r.description && r.description !== r.label && t(`rej.code.${r.code}`) === `rej.code.${r.code}` && <span className="block text-xs text-muted-foreground">{r.description}</span>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })}
             </div>
             {addingReason && (
-              <div className="flex gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
-                <Input className="h-8 text-sm" placeholder={t("pmap.val.reasonLabelPlaceholder")} value={newReasonLabel} onChange={(e) => setNewReasonLabel(e.target.value)} />
+              <div className="flex flex-wrap gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
+                <Input className="h-8 min-w-40 flex-1 text-sm" placeholder={t("pmap.val.reasonLabelPlaceholder")} value={newReasonLabel} onChange={(e) => setNewReasonLabel(e.target.value)} />
+                <Select value={newReasonKind} onValueChange={(v) => setNewReasonKind(v as RejectionKind)}>
+                  <SelectTrigger className="h-8 w-full text-xs sm:w-56" aria-label={t("rej.kind.label")}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {REJECTION_KINDS.map((k) => <SelectItem key={k} value={k} className="text-xs">{t(`rej.kind.${k}`)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
                 <Button size="sm" className="h-8" disabled={busy || !newReasonLabel.trim()} onClick={addReason}>{t("pmap.val.saveSelect")}</Button>
                 <Button size="sm" variant="ghost" className="h-8" onClick={() => setAddingReason(false)}>{t("common.cancel")}</Button>
               </div>

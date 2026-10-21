@@ -32,13 +32,14 @@ import * as hazardTrack from "./extra/hazard-track"
 import * as clustering from "./extra/clustering"
 import * as cloudSources from "./extra/cloud-sources"
 import * as trainingData from "./extra/training-data"
+import * as rejectionReasons from "./extra/rejection-reasons"
 
 export { signLabel, humanizeSign, subtypeText } from "./extra/traffic-signs"
 
 export type Lang = "en" | "fr" | "es"
 export const LANGS: Lang[] = ["en", "fr", "es"]
 
-const EXTRA = [admin, account, pagesOps, pagesMap, module6, module7, dashboard, community, historical, routes, ai, trafficSigns, parkedVehicle, hazardLifecycle, settingsModules, hazardTrack, clustering, cloudSources, trainingData]
+const EXTRA = [admin, account, pagesOps, pagesMap, module6, module7, dashboard, community, historical, routes, ai, trafficSigns, parkedVehicle, hazardLifecycle, settingsModules, hazardTrack, clustering, cloudSources, trainingData, rejectionReasons]
 const merge = (lang: Lang, core: Record<string, string>) =>
   Object.assign({}, core, ...EXTRA.map((m) => m[lang]))
 

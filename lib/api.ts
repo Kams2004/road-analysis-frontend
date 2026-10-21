@@ -170,12 +170,23 @@ export async function deleteJob(jobId: string): Promise<void> {
   }
 }
 
+/**
+ * What a rejection teaches the training set:
+ *  - false_positive: AI mistake → the crop becomes a negative example;
+ *  - real_redundant: the object is real (duplicate / already validated) → positive sample;
+ *  - unusable: can't judge → excluded from training.
+ */
+export type RejectionKind = "false_positive" | "real_redundant" | "unusable"
+export const REJECTION_KINDS: RejectionKind[] = ["false_positive", "real_redundant", "unusable"]
+
 export interface RejectionReason {
   id: string
   detection_type: string
   code: string
   label: string
   description: string
+  /** Older servers omit it: treat as false_positive. */
+  kind?: RejectionKind
   is_custom: boolean
   created_at: string
 }
@@ -188,7 +199,7 @@ export async function fetchRejectionReasons(detection_type?: string): Promise<Re
 }
 
 export async function createRejectionReason(body: {
-  detection_type: string; code: string; label: string; description: string
+  detection_type: string; code: string; label: string; description: string; kind?: RejectionKind
 }): Promise<RejectionReason> {
   const res = await fetch(`${API_BASE}/rejection-reasons/`, {
     method: "POST",
@@ -198,6 +209,22 @@ export async function createRejectionReason(body: {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.detail || "Failed to create reason")
+  }
+  return res.json()
+}
+
+/** Edit a custom reason (system reasons answer 409). Changing `kind` re-files its past training samples. */
+export async function updateRejectionReason(id: string, body: {
+  label?: string; description?: string; kind?: RejectionKind
+}): Promise<RejectionReason> {
+  const res = await fetch(`${API_BASE}/rejection-reasons/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(typeof err.detail === "string" ? err.detail : "Failed to update reason")
   }
   return res.json()
 }

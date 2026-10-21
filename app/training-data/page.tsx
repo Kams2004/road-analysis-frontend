@@ -128,6 +128,12 @@ function TrainingData() {
                   <TableCell>
                     <Line>{r.accepted} {t("td.accepted")} · {r.corrected} {t("td.corrected")} · {r.rejected} {t("td.rejected")}</Line>
                     {r.by_system > 0 && <Line muted>{t("td.auto", { n: r.by_system })}</Line>}
+                    {(r.redundant_positive ?? 0) > 0 && (
+                      <Line muted><span title={t("td.redundantPositive.help")} className="cursor-help underline decoration-dotted">{t("td.redundantPositive", { n: r.redundant_positive ?? 0 })}</span></Line>
+                    )}
+                    {(r.excluded ?? 0) > 0 && (
+                      <Line muted><span title={t("td.excluded.help")} className="cursor-help underline decoration-dotted">{t("td.excluded", { n: r.excluded ?? 0 })}</span></Line>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Line>{r.detector_frames}</Line>
