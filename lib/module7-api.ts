@@ -97,6 +97,10 @@ export interface Job {
   detections_by_model?: Record<string, number> | null
   fps?: number | null
   duration_s?: number | null
+  /** Dashcam overlay layout asked at submission (null = auto / settings `osd`). */
+  osd_layout_requested?: string | null
+  /** Overlay layout used: a profile (`total`, `besafe` …), `full_frame` or `none`. */
+  osd_layout?: string | null
   processing_seconds?: number | null
   /** 0..1 */
   progress?: number | null
@@ -421,3 +425,76 @@ export const saveCloudSettings = (body: Record<string, unknown>) =>
 /** Redirect URI to register with Google / Microsoft. */
 export const cloudRedirectUri = () =>
   typeof window === "undefined" ? "/settings/cloud/callback" : `${window.location.origin}/settings/cloud/callback`
+
+// ── Settings section `osd` — dashcam overlay layouts (RRAP-05-014) ───────────
+
+export const OSD_FIELD_KINDS = ["date_time", "gps", "vehicle_no", "user_def", "rpm", "driver_id", "driver_name", "channel"] as const
+export type OsdFieldKind = (typeof OSD_FIELD_KINDS)[number]
+
+/** One overlay field as on the device's OSD screen: top-left anchor on the 0–1000 grid. */
+export interface OsdField {
+  field: OsdFieldKind
+  enabled: boolean
+  x: number
+  y: number
+  line_height?: number | null
+  width?: number | null
+}
+
+export interface OsdProfile {
+  label: string
+  line_height: number
+  x_margin?: number
+  y_margin?: number
+  fields: OsdField[]
+  date_formats?: string[]
+  gps_regex?: string | null
+  plate_regex?: string | null
+  timezone?: string | null
+  detect?: boolean
+  aliases?: string[]
+}
+
+export interface OsdSettings {
+  default_layout: string
+  profiles: Record<string, OsdProfile>
+  by_vehicle: Record<string, string>
+  by_source: Record<string, string>
+  gps_box: number[] | null
+  probe_frames: number
+  full_frame_fallback: boolean
+  neighbour_retry: boolean
+}
+
+export interface OsdLayoutInfo extends OsdProfile {
+  name: string
+  builtin: boolean
+  rois: { field: string; box: [number, number, number, number] }[]
+}
+
+export const getOsdLayouts = () =>
+  request<{ default_layout: string; layouts: OsdLayoutInfo[] }>(`${P}/jobs/osd-layouts`)
+export async function getOsdSettings(): Promise<OsdSettings | null> {
+  const all = await request<Record<string, unknown>>(`${P}/platform-settings/`)
+  return (all?.osd as OsdSettings | undefined) ?? null
+}
+export const saveOsdSettings = (body: Partial<OsdSettings>) =>
+  request<OsdSettings>(`${P}/platform-settings/osd`, { method: "PUT", ...json(body) })
+
+/** OCR regions (frame ratios x0, y0, x1, y1) of the enabled fields — same rule as the
+ *  backend (osd_layouts.derive_rois): from the anchor minus the margins, up to the next
+ *  enabled field on the same line (else the frame edge), one line high. */
+export function deriveOsdRois(p: Pick<OsdProfile, "fields" | "line_height" | "x_margin" | "y_margin">) {
+  const on = p.fields.filter((f) => f.enabled)
+  const xm = p.x_margin ?? 20, ym = p.y_margin ?? 15
+  return on.map((f) => {
+    const lh = f.line_height || p.line_height || 50
+    const next = on.filter((g) => g !== f && g.x > f.x && Math.abs(g.y - f.y) < lh / 2).map((g) => g.x)
+    const x1 = f.width ? f.x + f.width : next.length ? Math.min(...next) : 1000
+    return {
+      field: f.field,
+      box: [Math.max(0, f.x - xm) / 1000, Math.max(0, f.y - ym) / 1000, Math.min(1000, x1) / 1000,
+            Math.min(1000, f.y + lh) / 1000] as [number, number, number, number],
+    }
+  })
+}

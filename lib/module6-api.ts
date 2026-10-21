@@ -15,7 +15,7 @@ const P = "/api/proxy"
 
 export type ReviewStatus = "location_pending" | "pending" | "validated" | "corrected" | "rejected" | "resolved"
 export type LocationStatus = "confirmed" | "approximate" | "missing"
-export type LocationSource = "ocr" | "interpolated" | "map_pin" | "trajectory" | "ocr_text" | "none"
+export type LocationSource = "ocr" | "ocr_neighbour" | "interpolated" | "map_pin" | "trajectory" | "ocr_text" | "none"
 /**
  * Cluster-first lifecycle. Hazard screens (GET /hazards/…) only ever see
  * confirmed hazards: `active` / `resolved`. `candidate` (CL- code, not

@@ -506,6 +506,17 @@ const VERDICT_TONE: Record<string, BadgeTone> = {
 
 type VehicleSummary = { verdicts: Record<string, number>; masked: number | null }
 
+/** Overlay (OSD) layout used by the job + how it was chosen (latest `osd_layout` event). */
+function osdLayoutText(job: JobDetail, t: ReturnType<typeof useI18n>["t"]): string {
+  const name = job.osd_layout ?? job.osd_layout_requested
+  if (!name) return "—"
+  const tr = (k: string, fallback: string) => (t(k) === k ? fallback : t(k))
+  const label = name === "full_frame" || name === "none" ? tr(`m7.osd.${name}`, name) : name
+  const ev = [...job.events].reverse().find((e) => e.event === "osd_layout" && e.details)
+  const method = job.osd_layout ? (ev?.details?.method as string | undefined) : undefined
+  return method ? `${label} · ${tr(`m7.osd.method.${method}`, method)}` : label
+}
+
 /** Parked-vehicle counters of the latest done / cancelled event (details.vehicle_verdicts / vehicle_boxes_masked). */
 function vehicleSummary(job: JobDetail): VehicleSummary | null {
   const evs = job.events
@@ -612,6 +623,7 @@ function JobDetailBody({ job, fmtDate, sourceLabel, actions, onAction }: {
         <Metric label={t("m7.jobs.detail.videoLength")} value={formatDuration(job.duration_s)} />
         <Metric label={t("m7.jobs.detail.fps")} value={job.fps != null ? job.fps.toFixed(1) : "—"} />
         <Metric label={t("m7.jobs.detail.frameSkip")} value={job.frame_skip != null ? t("m7.common.everyN", { n: job.frame_skip }) : "—"} />
+        <Metric label={t("m7.jobs.detail.osdLayout")} value={osdLayoutText(job, t)} />
         <Metric label={t("m7.jobs.col.attempts")} value={`${job.attempts ?? 1}${job.max_attempts ? ` / ${job.max_attempts}` : ""}`} />
         <Metric label={t("m7.jobs.detail.submittedBy")} value={job.submitted_by || "—"} />
         <Metric label={t("ops.jobs.col.submitted")} value={fmtDate(job.created_at)} />

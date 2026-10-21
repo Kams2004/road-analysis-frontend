@@ -23,6 +23,7 @@ export const en: Record<string, string> = {
   "m6.src.map_pin": "map pin",
   "m6.src.trajectory": "trajectory point",
   "m6.src.ocr_text": "typed OCR text",
+  "m6.src.ocr_neighbour": "OCR on neighbour frames",
   "m6.src.none": "none",
   // History actions
   "m6.action.accept": "Accepted",
@@ -251,6 +252,7 @@ export const fr: Record<string, string> = {
   "m6.src.map_pin": "épingle sur la carte",
   "m6.src.trajectory": "point de trajectoire",
   "m6.src.ocr_text": "texte OCR saisi",
+  "m6.src.ocr_neighbour": "OCR sur images voisines",
   "m6.src.none": "aucune",
   "m6.action.accept": "Acceptée",
   "m6.action.correct": "Corrigée",
@@ -466,6 +468,7 @@ export const es: Record<string, string> = {
   "m6.src.map_pin": "marcador en el mapa",
   "m6.src.trajectory": "punto de trayectoria",
   "m6.src.ocr_text": "texto OCR introducido",
+  "m6.src.ocr_neighbour": "OCR en fotogramas vecinos",
   "m6.src.none": "ninguna",
   "m6.action.accept": "Aceptada",
   "m6.action.correct": "Corregida",
