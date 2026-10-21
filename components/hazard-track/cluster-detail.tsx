@@ -10,9 +10,10 @@
  *  the Evidence viewer) · lifecycle timeline.
  */
 import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import { toast } from "sonner"
 import {
-  BrainCircuit, CheckCircle2, ChevronRight, Clock, Eye, History, ImageIcon, Layers, Loader2, RotateCcw, Target, X,
+  BrainCircuit, CheckCircle2, ChevronRight, ClipboardCheck, Clock, Eye, History, ImageIcon, Layers, Loader2, RotateCcw, Target, X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -24,6 +25,7 @@ import { AiBadges } from "@/components/ai-badges"
 import {
   ExpiresText, HazardTimeline, RecurringBadge, ResolutionSourceBadge, useHzlLabels, useNow,
 } from "@/components/hazard-lifecycle"
+import { ClusterDecisionButtons, HazardStatusBadge, MemberCountsLine, pendingOf } from "@/components/cluster-review"
 import { resolveMinioUrl } from "@/lib/api"
 import { errorText } from "@/lib/auth-api"
 import { cn } from "@/lib/utils"
@@ -48,6 +50,8 @@ export function ClusterDetail({ id, onBack, onChanged, onLoaded, onOpenDetection
   const { t } = L
   const { can } = useAuth()
   const canEdit = can("detections", "edit")
+  const canReview = can("validations", "edit")
+  const canSeeQueue = can("validations", "view")
   const now = useNow()
   const [h, setH] = useState<HazardDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -114,7 +118,9 @@ export function ClusterDetail({ id, onBack, onChanged, onLoaded, onOpenDetection
   const members = hazardMembers(h)
   const meta = typeMeta(h.type)
   const active = h.status === "active"
+  const toReview = pendingOf(h)
   const place = placeParts(h)
+  const decided = () => { load(); setTlKey((n) => n + 1); onChanged() }
 
   return (
     <div className="flex flex-col">
@@ -129,7 +135,7 @@ export function ClusterDetail({ id, onBack, onChanged, onLoaded, onOpenDetection
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-lg font-semibold leading-tight">{L.typeLabel(h.type)}</h3>
               {h.subtype && <span className="text-sm text-muted-foreground">{L.subtypeLabel(h.type, h.subtype)}</span>}
-              <Pill tone={active ? "red" : "slate"}>{L.statusLabel(h.status)}</Pill>
+              <HazardStatusBadge status={h.status} />
               {h.recurring_spot && <RecurringBadge count={h.recurrence_count} />}
               <ZoneBadge h={h} />
             </div>
@@ -148,11 +154,29 @@ export function ClusterDetail({ id, onBack, onChanged, onLoaded, onOpenDetection
               <Button size="sm" onClick={() => setMode("resolve")} className="bg-success text-white hover:bg-success/90">
                 <CheckCircle2 className="h-4 w-4" />{t("m6.hz.resolve")}
               </Button>
-            ) : (
+            ) : h.status === "resolved" ? (
               <Button size="sm" variant="outline" onClick={() => setMode("reopen")}><RotateCcw className="h-4 w-4" />{t("m6.hz.reopen")}</Button>
-            )
+            ) : null
           )}
         </div>
+
+        {/* New detections of a confirmed hazard waiting for a review (re-sightings not auto-validated) */}
+        {active && toReview > 0 && (
+          <div className="relative mt-3 space-y-2 rounded-lg border bg-background/70 p-3 text-sm">
+            <p className="flex flex-wrap items-center gap-2 font-medium">
+              <ClipboardCheck className="h-4 w-4 text-primary" />{t("cr.detail.pendingTitle", { n: toReview })}
+            </p>
+            <p className="text-xs text-muted-foreground">{t("cr.detail.pendingHint")}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {canReview && toReview > 0 && <ClusterDecisionButtons hazard={h} onDone={decided} />}
+              {canSeeQueue && toReview > 0 && (
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={`/validations?hazard=${h.id}`}><ClipboardCheck className="h-4 w-4" />{t("cr.reviewCluster")}</Link>
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
 
         {canEdit && mode !== "idle" && (
           <div className="relative mt-3 space-y-2 rounded-lg border bg-background p-3">
@@ -180,6 +204,7 @@ export function ClusterDetail({ id, onBack, onChanged, onLoaded, onOpenDetection
             value={active ? (h.expires_at ? <ExpiresText iso={h.expires_at} now={now} className="text-sm font-semibold" /> : t("hzl.never")) : L.fmtShort(h.resolved_at)}
             hint={active ? undefined : h.resolved_by ?? undefined} />
         </dl>
+        <MemberCountsLine h={h} className="relative mt-2 text-xs" />
         <p className="relative mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground">
           <span>{t("m6.col.firstSeen")}: {L.fmtDate(h.first_detected_at)}</span>
           <span>{t("m6.col.lastSeen")}: {L.fmtDate(h.last_detected_at)}</span>
@@ -301,6 +326,9 @@ function MemberRow({ m, index, cluster, selected, onOpen }: {
           </div>
           <AiBadges d={{ ai_decision: m.ai_decision ?? null, ai_decision_reason: m.ai_decision_reason ?? null, audit_sample: m.audit_sample ?? null }} />
           {m.ai_decision_reason && <p className="line-clamp-1 text-[11px] italic text-muted-foreground">{m.ai_decision_reason}</p>}
+          {status === "rejected" && m.rejection_code && (
+            <p className="text-[11px] text-muted-foreground">{t("cr.member.rejected", { reason: L.tl(`rej.code.${m.rejection_code}`, m.rejection_code.replace(/_/g, " ")) })}</p>
+          )}
           {differs && <p className="truncate text-[11px] text-muted-foreground">{own}</p>}
         </div>
       </button>

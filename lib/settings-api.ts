@@ -178,20 +178,22 @@ export interface TypePolicy {
   recurring_enabled: boolean
   show_to_drivers: boolean
   alert_priority: "low" | "normal" | "high"
+  /** Detections joining a confirmed hazard are validated automatically (re-sighting). */
+  auto_confirm_resightings: boolean
   subtype_overrides: Record<string, Partial<Omit<TypePolicy, "subtype_overrides">>>
 }
 export type PolicyField = Exclude<keyof TypePolicy, "subtype_overrides">
 export const POLICY_FIELDS: PolicyField[] = [
   "expiry_hours", "heavy_vehicle_expiry_hours", "absence_resolution", "absences_to_resolve", "require_same_direction",
   "pass_daylight_only", "votes_enabled", "not_there_to_resolve", "still_there_extends", "reopen_on_sighting",
-  "reopen_window_hours", "recurring_enabled", "show_to_drivers", "alert_priority",
+  "reopen_window_hours", "recurring_enabled", "show_to_drivers", "alert_priority", "auto_confirm_resightings",
 ]
 /** Kind of each policy field (editor widgets). */
 export const POLICY_FIELD_KIND: Record<PolicyField, "hours" | "int" | "bool" | "priority"> = {
   expiry_hours: "hours", heavy_vehicle_expiry_hours: "hours", absence_resolution: "bool", absences_to_resolve: "int",
   require_same_direction: "bool", pass_daylight_only: "bool", votes_enabled: "bool", not_there_to_resolve: "int",
   still_there_extends: "bool", reopen_on_sighting: "bool", reopen_window_hours: "hours", recurring_enabled: "bool",
-  show_to_drivers: "bool", alert_priority: "priority",
+  show_to_drivers: "bool", alert_priority: "priority", auto_confirm_resightings: "bool",
 }
 
 export interface HazardLifecycleSettings {
@@ -203,6 +205,10 @@ export interface HazardLifecycleSettings {
   pass_max_speed_kmh: number
   pass_heading_tolerance_deg: number
   pass_require_recording_time: boolean
+  /** A pass counts only when the track shows the vehicle approaching the spot (ahead of the camera). */
+  pass_require_approach: boolean
+  /** Minimum approach distance (m) along the track for a pass to count. */
+  pass_approach_min_m: number
   type_models: Record<string, string[]>
   vote_max_distance_m: number
   vote_cooldown_minutes: number
@@ -218,11 +224,16 @@ export const TYPE_POLICY_DEFAULTS: TypePolicy = {
   expiry_hours: null, heavy_vehicle_expiry_hours: null, absence_resolution: false, absences_to_resolve: 2,
   require_same_direction: false, pass_daylight_only: false, votes_enabled: true, not_there_to_resolve: 2,
   still_there_extends: false, reopen_on_sighting: false, reopen_window_hours: null, recurring_enabled: false,
-  show_to_drivers: true, alert_priority: "normal", subtype_overrides: {},
+  show_to_drivers: true, alert_priority: "normal", auto_confirm_resightings: true, subtype_overrides: {},
 }
 
 const policy = (p: Partial<TypePolicy>): TypePolicy => ({ ...TYPE_POLICY_DEFAULTS, ...p })
-const persistent: Partial<TypePolicy> = { expiry_hours: null, absence_resolution: false, votes_enabled: true, not_there_to_resolve: 3, recurring_enabled: false }
+// Potholes / speed bumps never expire but are resolved (or, while candidates,
+// dismissed) after 3 valid video passes in the same direction without them.
+const persistent: Partial<TypePolicy> = {
+  expiry_hours: null, absence_resolution: true, absences_to_resolve: 3, require_same_direction: true,
+  votes_enabled: true, not_there_to_resolve: 3, recurring_enabled: false,
+}
 
 export const DEFAULT_POLICIES: Record<string, TypePolicy> = {
   pothole: policy(persistent),
@@ -248,6 +259,8 @@ export const HAZARD_LIFECYCLE_DEFAULTS: HazardLifecycleSettings = {
   pass_max_speed_kmh: 60,
   pass_heading_tolerance_deg: 60,
   pass_require_recording_time: true,
+  pass_require_approach: true,
+  pass_approach_min_m: 10,
   type_models: { pothole: ["pothole"], traffic_sign: ["signs"], speed_bump: ["speedbump"], parked_vehicle: ["vehicles", "parked_vehicle"] },
   vote_max_distance_m: 300,
   vote_cooldown_minutes: 60,

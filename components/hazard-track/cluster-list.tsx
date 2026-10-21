@@ -19,7 +19,10 @@ import { DETECTION_TYPES, RESOLUTION_SOURCES, type Hazard, type HazardPlace } fr
 import { ClusterCard } from "./cluster-card"
 import { TypeTile } from "./shared"
 
+/** Hazard statuses shown by the explorer: confirmed hazards only (candidates live in Validations). */
 export type ClusterStatus = "active" | "resolved"
+export const CLUSTER_STATUSES: ClusterStatus[] = ["active", "resolved"]
+const STATUS_ICON = { active: TriangleAlert, resolved: CheckCircle2 } as const
 
 export interface ClusterFilters {
   search: string
@@ -28,12 +31,14 @@ export interface ClusterFilters {
   place: string
   recurring: string
   resolution: string
+  /** "all" | "yes" (has unreviewed members) | "no" */
+  pending: string
   dateFrom: string
   dateTo: string
 }
 
 export const EMPTY_CLUSTER_FILTERS: ClusterFilters = {
-  search: "", type: "all", place: "", recurring: "all", resolution: "all", dateFrom: "", dateTo: "",
+  search: "", type: "all", place: "", recurring: "all", resolution: "all", pending: "all", dateFrom: "", dateTo: "",
 }
 
 export const SORTS = ["-last_detected_at", "-detection_count", "-avg_confidence", "expires_at", "-code"] as const
@@ -51,7 +56,7 @@ export function placeQuery(place: string): { town?: string; locality?: string } 
 export function ClusterList(props: {
   status: ClusterStatus
   onStatus: (s: ClusterStatus) => void
-  counts: { active: number | null; resolved: number | null }
+  counts: Partial<Record<ClusterStatus, number | null>>
   filters: ClusterFilters
   onFilter: (k: keyof ClusterFilters, v: string) => void
   onReset: () => void
@@ -75,8 +80,8 @@ export function ClusterList(props: {
   const L = useHzlLabels()
   const { t } = L
   const { filters: f, onFilter } = props
-  const [more, setMore] = useState(!!(f.dateFrom || f.dateTo || f.recurring !== "all" || f.resolution !== "all"))
-  const activeFilters = [f.type !== "all", !!f.place, f.recurring !== "all", f.resolution !== "all", !!f.dateFrom, !!f.dateTo]
+  const [more, setMore] = useState(!!(f.dateFrom || f.dateTo || f.recurring !== "all" || f.resolution !== "all" || f.pending !== "all"))
+  const activeFilters = [f.type !== "all", !!f.place, f.recurring !== "all", f.resolution !== "all", f.pending !== "all", !!f.dateFrom, !!f.dateTo]
     .filter(Boolean).length
   const pages = Math.max(1, Math.ceil(props.total / props.pageSize))
   const refs = useRef<Record<string, HTMLButtonElement | null>>({})
@@ -91,23 +96,26 @@ export function ClusterList(props: {
     <section aria-labelledby="ht-clusters-title" className={cn("flex min-h-0 flex-col", props.className)}>
       {/* Heading */}
       <div className="space-y-3 border-b px-4 pb-3 pt-4">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="ht-clusters-title" className="flex items-center gap-2 text-base font-semibold">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary"><MapPin className="h-4 w-4" /></span>
             {t("ht.clusters.title")}
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground">{props.total}</span>
           </h2>
-          <div className="inline-flex rounded-lg bg-muted p-0.5 text-xs font-medium" role="tablist" aria-label={t("common.status")}>
-            {(["active", "resolved"] as const).map((s) => (
+        </div>
+        <div className="flex flex-wrap rounded-lg bg-muted p-0.5 text-xs font-medium" role="tablist" aria-label={t("common.status")}>
+          {CLUSTER_STATUSES.map((s) => {
+            const Icon = STATUS_ICON[s]
+            return (
               <button key={s} type="button" role="tab" aria-selected={props.status === s} onClick={() => props.onStatus(s)}
-                className={cn("inline-flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors",
+                className={cn("inline-flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 transition-colors",
                   props.status === s ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                {s === "active" ? <TriangleAlert className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                {t(`ht.status.${s}`)}
+                <Icon className="h-3.5 w-3.5" />
+                {t(`cr.tab.${s}`)}
                 {props.counts[s] != null && <span className="tabular-nums opacity-70">{props.counts[s]}</span>}
               </button>
-            ))}
-          </div>
+            )
+          })}
         </div>
         <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
           <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />{t("ht.clusters.hint")}
@@ -176,7 +184,16 @@ export function ClusterList(props: {
                 <SelectItem value="no">{t("hzl.filter.recurringNot")}</SelectItem>
               </SelectContent>
             </Select>
-            {props.status === "resolved" ? (
+            {props.status === "active" ? (
+              <Select value={f.pending} onValueChange={(v) => onFilter("pending", v)}>
+                <SelectTrigger className="h-9 w-full" aria-label={t("cr.filter.pending")}><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("cr.filter.pendingAll")}</SelectItem>
+                  <SelectItem value="yes">{t("cr.filter.pendingYes")}</SelectItem>
+                  <SelectItem value="no">{t("cr.filter.pendingNo")}</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : props.status === "resolved" ? (
               <Select value={f.resolution} onValueChange={(v) => onFilter("resolution", v)}>
                 <SelectTrigger className="h-9 w-full" aria-label={t("hzl.filter.resolution")}><SelectValue /></SelectTrigger>
                 <SelectContent>

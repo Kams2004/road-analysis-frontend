@@ -143,7 +143,7 @@ export async function submitJob(file: File, models: string[]): Promise<JobOut> {
   const res = await fetch(`${API_BASE}/jobs/${q}`, { method: "POST", body: form })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err.detail || "Failed to submit job")
+    throw new Error(typeof err.detail === "string" ? err.detail : err.detail?.message || "Failed to submit job")
   }
   return res.json()
 }

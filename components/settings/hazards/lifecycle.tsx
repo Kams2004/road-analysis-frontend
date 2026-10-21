@@ -43,6 +43,7 @@ const POLICY_SPEC: Record<PolicyField, NumSpec | null> = {
   not_there_to_resolve: { min: 1, max: 100, integer: true },
   absence_resolution: null, require_same_direction: null, pass_daylight_only: null, votes_enabled: null,
   still_there_extends: null, reopen_on_sighting: null, recurring_enabled: null, show_to_drivers: null, alert_priority: null,
+  auto_confirm_resightings: null,
 }
 
 const GLOBAL_NUM: Partial<Record<Key, NumSpec & { unit?: string }>> = {
@@ -50,6 +51,7 @@ const GLOBAL_NUM: Partial<Record<Key, NumSpec & { unit?: string }>> = {
   pass_max_distance_m: { min: 0, minExclusive: true, max: 1000, unit: "m" },
   pass_max_speed_kmh: { min: 0, minExclusive: true, max: 300, unit: "kmh" },
   pass_heading_tolerance_deg: { min: 0, max: 180, unit: "deg" },
+  pass_approach_min_m: { min: 1, max: 200, unit: "m" },
   vote_max_distance_m: { min: 10, max: 50000, integer: true, unit: "m" },
   vote_cooldown_minutes: { min: 0, max: 10080, integer: true, unit: "min" },
   recurring_min_occurrences: { min: 2, max: 1000, integer: true, unit: "hazards" },
@@ -60,7 +62,7 @@ const GLOBAL_NUM: Partial<Record<Key, NumSpec & { unit?: string }>> = {
 interface Group { id: string; icon: typeof Clock; tone: "blue" | "green" | "purple" | "orange" | "red" | "teal" | "slate"; keys: Key[] }
 const GROUPS: Group[] = [
   { id: "timing", icon: Clock, tone: "blue", keys: ["expiry_check_minutes", "timezone", "daylight_hours", "osd_time_is_local"] },
-  { id: "passes", icon: Video, tone: "purple", keys: ["pass_max_distance_m", "pass_max_speed_kmh", "pass_heading_tolerance_deg", "pass_require_recording_time", "type_models"] },
+  { id: "passes", icon: Video, tone: "purple", keys: ["pass_max_distance_m", "pass_max_speed_kmh", "pass_heading_tolerance_deg", "pass_require_recording_time", "pass_require_approach", "pass_approach_min_m", "type_models"] },
   { id: "votes", icon: Vote, tone: "orange", keys: ["vote_max_distance_m", "vote_cooldown_minutes"] },
   { id: "recurring", icon: Repeat, tone: "teal", keys: ["recurring_min_occurrences", "recurring_window_days", "recurring_radius_m"] },
   { id: "heavy", icon: Truck, tone: "slate", keys: ["heavy_vehicle_classes"] },
@@ -221,6 +223,10 @@ export function HazardLifecycleSettingsForm({ readOnly }: { readOnly: boolean })
             <SwitchRow id="hl-pass-rec" label={t("set.hl.pass_require_recording_time")} help={t("set.hl.pass_require_recording_time.help")}
               def={D.pass_require_recording_time} checked={d.pass_require_recording_time} readOnly={readOnly}
               onChange={(v) => set("pass_require_recording_time", v)} />
+            <SwitchRow id="hl-pass-approach" label={t("set.hl.pass_require_approach")} help={t("set.hl.pass_require_approach.help")}
+              def={D.pass_require_approach} checked={d.pass_require_approach ?? D.pass_require_approach} readOnly={readOnly}
+              onChange={(v) => set("pass_require_approach", v)} />
+            {(d.pass_require_approach ?? D.pass_require_approach) && num("pass_approach_min_m")}
           </div>
           <FieldBlock label={t("set.hl.type_models")} help={t("set.hl.type_models.help")} error={err("type_models")}>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -288,6 +294,7 @@ export function HazardLifecycleSettingsForm({ readOnly }: { readOnly: boolean })
                     <TableCell className="py-1.5">
                       <div className="flex flex-wrap gap-1">
                         {flags.map((f) => <Badge key={f} variant="outline" className="text-[10px]">{t(`set.hl.flag.${f}`)}</Badge>)}
+                        {p.auto_confirm_resightings === false && <Badge variant="outline" className="text-[10px]">{t("set.hl.flag.no_auto_confirm")}</Badge>}
                         {!p.show_to_drivers && <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-700 dark:text-amber-400">{t("set.hl.flag.hidden")}</Badge>}
                       </div>
                     </TableCell>

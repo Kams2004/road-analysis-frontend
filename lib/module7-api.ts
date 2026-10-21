@@ -202,20 +202,21 @@ export const deleteJob = (id: string) => request<void>(`${P}/jobs/${id}`, { meth
 export const getJobCapacity = () => request<JobCapacity>(`${P}/jobs/capacity`)
 export const getJobSummary = () => request<JobSummary>(`${P}/jobs/summary`)
 
-/** Build the POST /jobs/ URL (query `models`, optional `frame_skip`). */
-export function jobSubmitUrl(models: string[], frameSkip?: number | null): string {
+/** Build the POST /jobs/ URL (query `models`, optional `frame_skip`, `force`). */
+export function jobSubmitUrl(models: string[], frameSkip?: number | null, force = false): string {
   const q = new URLSearchParams()
   if (models.length) q.set("models", models.join(","))
   if (frameSkip != null) q.set("frame_skip", String(frameSkip))
+  if (force) q.set("force", "true")
   const s = q.toString()
   return `${P}/jobs/${s ? `?${s}` : ""}`
 }
 
 /** Multipart submit (request() would force a JSON content type). */
-export async function submitJob(file: File, models: string[], frameSkip?: number | null): Promise<Job> {
+export async function submitJob(file: File, models: string[], frameSkip?: number | null, force = false): Promise<Job> {
   const form = new FormData()
   form.append("file", file)
-  const res = await fetch(jobSubmitUrl(models, frameSkip), { method: "POST", body: form })
+  const res = await fetch(jobSubmitUrl(models, frameSkip, force), { method: "POST", body: form })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     const raw = data?.detail
@@ -224,6 +225,26 @@ export async function submitJob(file: File, models: string[], frameSkip?: number
     throw new ApiError(res.status, detail)
   }
   return data as Job
+}
+
+/**
+ * 409 `duplicate_video` of POST /jobs/: the same video content (sha256) was
+ * already processed or is queued. Re-send with `force` to process it again.
+ */
+export interface DuplicateVideoDetail {
+  code: "duplicate_video"
+  message?: string
+  job_id: string
+  job_status?: JobStatus | string | null
+  filename?: string | null
+  processed_at?: string | null
+  fingerprint?: string | null
+}
+
+export function asDuplicateVideo(detail: unknown): DuplicateVideoDetail | null {
+  if (!detail || typeof detail !== "object" || Array.isArray(detail)) return null
+  const d = detail as Record<string, unknown>
+  return d.code === "duplicate_video" && typeof d.job_id === "string" ? (d as unknown as DuplicateVideoDetail) : null
 }
 
 // ── Streams ──────────────────────────────────────────────────────────────────

@@ -16,7 +16,16 @@ const P = "/api/proxy"
 export type ReviewStatus = "location_pending" | "pending" | "validated" | "corrected" | "rejected" | "resolved"
 export type LocationStatus = "confirmed" | "approximate" | "missing"
 export type LocationSource = "ocr" | "interpolated" | "map_pin" | "trajectory" | "ocr_text" | "none"
-export type HazardStatus = "active" | "resolved"
+/**
+ * Cluster-first lifecycle. Hazard screens (GET /hazards/…) only ever see
+ * confirmed hazards: `active` / `resolved`. `candidate` (CL- code, not
+ * validated yet) and `dismissed` only appear in the Validations review queue
+ * and on detections (`hazard_status`, queue `cluster`).
+ */
+export type HazardStatus = "candidate" | "active" | "resolved" | "dismissed"
+export const HAZARD_STATUSES: HazardStatus[] = ["candidate", "active", "resolved", "dismissed"]
+/** Still on the road (candidate or confirmed) — not resolved / dismissed. */
+export const isOpenHazard = (s: string | null | undefined) => s === "active" || s === "candidate"
 
 export interface ListOut<T> { total: number; items: T[] }
 
@@ -24,6 +33,9 @@ export interface ClusterHint {
   hazard_id: string
   hazard_code: string
   detection_count: number
+  /** The hazard the detection belongs to (cluster-first). */
+  status?: HazardStatus | string | null
+  confirmed?: boolean | null
 }
 
 export interface M6Detection {
@@ -88,6 +100,8 @@ export interface M6Detection {
   resolved_at: string | null
   hazard_id: string | null
   hazard_code: string | null
+  /** Status of the hazard (cluster) the detection belongs to. */
+  hazard_status?: HazardStatus | string | null
   created_at: string
   /** Only on GET /detections/queue. */
   cluster?: ClusterHint | null
@@ -130,7 +144,7 @@ export interface DetectionReview {
   detection_id: string
   from_status: string | null
   to_status: string
-  action: "accept" | "correct" | "reject" | "reopen" | "location_fix" | "auto_reject" | "auto_accept" | "resolve" | "create" | string
+  action: "accept" | "correct" | "reject" | "reopen" | "location_fix" | "auto_reject" | "auto_accept" | "resolve" | "create" | "resight" | string
   actor_type: "user" | "system"
   actor: string | null
   note: string | null
@@ -142,6 +156,7 @@ export interface HazardRef {
   id: string
   code: string
   status: HazardStatus
+  confirmed?: boolean
   type?: string
   detection_count?: number
   latitude?: number | null
@@ -173,6 +188,12 @@ export interface Hazard {
   type: string
   subtype: string | null
   status: HazardStatus
+  /** true for active / resolved (validated at least once). */
+  confirmed?: boolean
+  /** Members by review status (all keys present on recent backends). */
+  member_counts?: MemberCounts | null
+  /** Unreviewed members (pending + location_pending). */
+  pending_count?: number
   latitude: number
   longitude: number
   radius_m: number | null
@@ -214,13 +235,23 @@ export interface Hazard {
   cover_image_url?: string | null
 }
 
+export interface MemberCounts {
+  pending: number
+  location_pending: number
+  validated: number
+  corrected: number
+  resolved: number
+  rejected: number
+}
+
 export type ResolutionSource = "manual" | "video_absence" | "votes" | "expiry"
 export const RESOLUTION_SOURCES: ResolutionSource[] = ["manual", "video_absence", "votes", "expiry"]
 
 export type HazardEventKind =
   | "seen" | "not_seen" | "vote_still_there" | "vote_not_there" | "expired" | "resolved" | "reopened"
+  | "confirmed" | "merged"
 export const HAZARD_EVENT_KINDS: HazardEventKind[] =
-  ["seen", "not_seen", "vote_still_there", "vote_not_there", "expired", "resolved", "reopened"]
+  ["seen", "not_seen", "confirmed", "vote_still_there", "vote_not_there", "expired", "resolved", "reopened", "merged"]
 
 export interface HazardEvent {
   id: string
@@ -279,6 +310,8 @@ export interface HazardMember {
   verifier_score?: number | null
   audit_sample?: boolean | null
   reviewed_by?: string | null
+  rejection_code?: string | null
+  rejection_source?: "human" | "auto" | null
   /** Structured reverse-geocoded address (street, quartier, arrondissement, town, region). */
   road?: string | null
   locality?: string | null
@@ -363,6 +396,8 @@ export interface DetectionFilters {
   ai_decision?: string
   /** true = only automatic decisions drawn for a human audit. */
   audit_sample?: boolean
+  /** Queue only: true = detections in a hazard, false = not in any hazard yet. */
+  clustered?: boolean
   sort?: string
   skip?: number
   limit?: number
@@ -440,6 +475,7 @@ export async function downloadRejectedExport(format: "csv" | "json", f: Omit<Rej
 // ── Hazards ──────────────────────────────────────────────────────────────────
 
 export interface HazardFilters {
+  /** active | resolved (hazard screens only see confirmed hazards). */
   status?: HazardStatus | string
   type?: string
   subtype?: string
@@ -452,6 +488,10 @@ export interface HazardFilters {
   search?: string
   resolution_source?: ResolutionSource | string
   recurring_spot?: boolean
+  /** true = active / resolved, false = candidate / dismissed. */
+  confirmed?: boolean
+  /** Hazards with (true) / without (false) unreviewed members. */
+  has_pending?: boolean
   sort?: string
   skip?: number
   limit?: number
@@ -462,6 +502,52 @@ export const getHazard = (id: string) => request<HazardDetail>(`${P}/hazards/${i
 export const resolveHazard = (id: string, note?: string) => post<Hazard>(`${P}/hazards/${id}/resolve`, { note })
 export const reopenHazard = (id: string, reason: string) => post<Hazard>(`${P}/hazards/${id}/reopen`, { reason })
 export const getHazardSummary = () => request<HazardSummary>(`${P}/hazards/summary`)
+
+// ── Cluster review (cluster-first validation) ───────────────────────────────
+
+export interface ReviewQueueItem {
+  hazard: Hazard
+  /** Unreviewed members (pending / location_pending), highest confidence first. */
+  detections: M6Detection[]
+}
+
+export interface ReviewQueue {
+  total: number
+  /** Candidate clusters (CL- code, not hazards yet) with unreviewed detections. */
+  candidates: number
+  /** Unreviewed detections that belong to no hazard yet (no position). */
+  unclustered: number
+  items: ReviewQueueItem[]
+}
+
+export const REVIEW_QUEUE_SORTS = ["-pending_count", "-last_detected_at", "-max_confidence", "code"] as const
+
+export const getReviewQueue = (f: {
+  type?: string; subtype?: string; job_id?: string; search?: string; sort?: string; skip?: number; limit?: number; members?: number
+} = {}) => request<ReviewQueue>(`${P}/hazards/review-queue${qs({ ...f })}`).then((r) => ({
+  total: r?.total ?? 0, unclustered: r?.unclustered ?? 0, candidates: r?.candidates ?? 0, items: r?.items ?? [],
+}))
+
+export interface ClusterDecision {
+  hazard_id: string
+  /** After a successful accept of a candidate: the new HZ- code (was CL-). */
+  hazard_code: string
+  /** "deleted" when a rejected candidate lost all its members. */
+  hazard_status: HazardStatus | "deleted" | string | null
+  accepted: number
+  rejected: number
+  auto_validated: number
+  skipped: number
+  hazard: HazardDetail | null
+}
+
+/** Validate every pending member and confirm the hazard (validations:edit). */
+export const acceptCluster = (id: string, body: { note?: string; label?: string; severity_score?: number } = {}) =>
+  post<ClusterDecision>(`${P}/hazards/${id}/accept`, body)
+
+/** Reject every unreviewed member; a candidate left empty is deleted (validations:edit). */
+export const rejectCluster = (id: string, body: { reason_code: string; note?: string }) =>
+  post<ClusterDecision>(`${P}/hazards/${id}/reject`, body)
 
 /** Lifecycle timeline of a hazard, newest first (detections:view). */
 export const getHazardEvents = (id: string, f: { kind?: string[]; skip?: number; limit?: number } = {}) => {

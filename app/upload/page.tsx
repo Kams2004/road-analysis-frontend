@@ -2,10 +2,14 @@
 
 import { useState, useCallback, useEffect, useRef, memo } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   Upload, FileVideo, ImageIcon, Loader2, CheckCircle2, XCircle, Play, Trash2, Clock, Ban, ExternalLink, Film, TriangleAlert, Cpu,
-  Cloud,
+  Cloud, Copy,
 } from "lucide-react"
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -27,7 +31,13 @@ import { cn } from "@/lib/utils"
 import { subtypeText, useI18n, useT } from "@/lib/i18n"
 import { useAuth } from "@/components/auth-provider"
 import { RequirePermission } from "@/components/require-permission"
-import { getModule7Settings, jobSubmitUrl } from "@/lib/module7-api"
+import { asDuplicateVideo, getModule7Settings, jobSubmitUrl, parseDate, type DuplicateVideoDetail } from "@/lib/module7-api"
+
+/** 409 duplicate_video: the same video content was already processed (or is queued). */
+class DuplicateVideoError extends Error {
+  constructor(readonly detail: DuplicateVideoDetail) { super(detail.message || "duplicate_video") }
+}
+type DuplicateChoice = "open" | "force" | "cancel"
 
 const MODEL_MAP: Record<string, string> = {
   potholes: "pothole",
@@ -80,7 +90,8 @@ export default function UploadPage() {
   const seenDetections = useRef<Set<string>>(new Set())
   // track detection offset per job so we page through all detections
   const detOffsets = useRef<Map<string, number>>(new Map())
-  const { t, lang } = useI18n()
+  const { t, lang, locale } = useI18n()
+  const router = useRouter()
   const { can } = useAuth()
   const canAdd = can("jobs", "add")
   // Frame sampling (RRAP-07-013): default comes from the `processing` settings;
@@ -145,13 +156,14 @@ export default function UploadPage() {
     file: File,
     models: string[],
     frameSkipOverride: number | null,
-    onProgress: (pct: number) => void
+    onProgress: (pct: number) => void,
+    force = false,
   ): Promise<JobOut> =>
     new Promise((resolve, reject) => {
       const form = new FormData()
       form.append("file", file)
       const xhr = new XMLHttpRequest()
-      xhr.open("POST", jobSubmitUrl(models, frameSkipOverride))
+      xhr.open("POST", jobSubmitUrl(models, frameSkipOverride, force))
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
       }
@@ -161,6 +173,8 @@ export default function UploadPage() {
         } else {
           try {
             const detail = JSON.parse(xhr.responseText).detail
+            const dup = xhr.status === 409 ? asDuplicateVideo(detail) : null
+            if (dup) { reject(new DuplicateVideoError(dup)); return }
             const msg = typeof detail === "string" ? detail : detail?.message ?? (Array.isArray(detail) ? detail.map((d: { msg?: string }) => d.msg).join("; ") : "")
             reject(new Error(msg || `HTTP ${xhr.status}`))
           }
@@ -240,6 +254,21 @@ export default function UploadPage() {
     tick()
   }, [])
 
+  // ── duplicate video prompt ────────────────────────────────────────────────
+
+  const [dupPrompt, setDupPrompt] = useState<{
+    detail: DuplicateVideoDetail
+    filename: string
+    resolve: (c: DuplicateChoice) => void
+  } | null>(null)
+  const askDuplicate = (detail: DuplicateVideoDetail, filename: string) =>
+    new Promise<DuplicateChoice>((resolve) => setDupPrompt({ detail, filename, resolve }))
+  const answerDuplicate = (c: DuplicateChoice) => {
+    dupPrompt?.resolve(c)
+    setDupPrompt(null)
+  }
+  const jobHref = (id: string) => (can("jobs", "view") ? `/jobs?job=${id}` : `/detections?job_id=${id}`)
+
   // ── submit ────────────────────────────────────────────────────────────────
 
   const submitAll = async () => {
@@ -266,11 +295,26 @@ export default function UploadPage() {
 
       try {
         const backendModels = selectedModels.map((m) => MODEL_MAP[m] ?? m)
-        const job = await uploadWithProgress(s.file, backendModels, skipOverride, (pct) => {
+        const send = (force: boolean) => uploadWithProgress(s.file, backendModels, skipOverride, (pct) => {
           setQueue((prev) =>
             prev.map((q) => q.id === qId ? { ...q, progress: pct } : q)
           )
-        })
+        }, force)
+        let job: JobOut
+        try {
+          job = await send(false)
+        } catch (e) {
+          if (!(e instanceof DuplicateVideoError)) throw e
+          // Same video content already processed / queued: ask what to do.
+          const choice = await askDuplicate(e.detail, s.file.name)
+          if (choice !== "force") {
+            setQueue((prev) => prev.filter((q) => q.id !== qId))
+            if (choice === "open") router.push(jobHref(e.detail.job_id))
+            continue
+          }
+          setQueue((prev) => prev.map((q) => q.id === qId ? { ...q, progress: 0 } : q))
+          job = await send(true)
+        }
         setQueue((prev) =>
           prev.map((q) =>
             q.id === qId
@@ -567,6 +611,38 @@ export default function UploadPage() {
           100% { left: 100%; }
         }
       `}</style>
+
+      <Dialog open={!!dupPrompt} onOpenChange={(o) => { if (!o) answerDuplicate("cancel") }}>
+        <DialogContent className="sm:max-w-md">
+          {dupPrompt && (() => {
+            const d = dupPrompt.detail
+            const when = parseDate(d.processed_at)
+            const date = when ? when.toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" }) : null
+            const job = d.filename ? `${d.filename} · ${d.job_id.slice(0, 8)}` : d.job_id.slice(0, 8)
+            const queued = d.job_status === "pending" || d.job_status === "processing"
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2"><Copy className="h-5 w-5 text-amber-500" />{t("m7.dup.title")}</DialogTitle>
+                  <DialogDescription>
+                    {queued
+                      ? t("m7.dup.queued", { job })
+                      : date ? t("m7.dup.processedOn", { date, job }) : t("m7.dup.processed", { job })}
+                  </DialogDescription>
+                </DialogHeader>
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">{dupPrompt.filename}</span> — {t("m7.dup.hint")}
+                </p>
+                <DialogFooter className="gap-2 sm:gap-0">
+                  <Button variant="ghost" onClick={() => answerDuplicate("cancel")}>{t("common.cancel")}</Button>
+                  <Button variant="outline" onClick={() => answerDuplicate("open")}><ExternalLink className="h-4 w-4" />{t("m7.dup.open")}</Button>
+                  <Button onClick={() => answerDuplicate("force")}><Play className="h-4 w-4" />{t("m7.dup.force")}</Button>
+                </DialogFooter>
+              </>
+            )
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

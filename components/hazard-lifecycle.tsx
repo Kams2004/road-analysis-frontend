@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import {
-  CheckCircle2, Eye, EyeOff, Hourglass, Loader2, Repeat, RotateCcw, ThumbsDown, ThumbsUp, TimerOff, Video,
+  CheckCircle2, Eye, EyeOff, GitMerge, Hourglass, Loader2, Repeat, RotateCcw, ShieldCheck, ThumbsDown, ThumbsUp, TimerOff, Video,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -107,11 +107,45 @@ const KIND_STYLE: Record<HazardEventKind, { Icon: LucideIcon; cls: string }> = {
   expired:          { Icon: TimerOff,     cls: "text-slate-600 border-slate-500/40 bg-slate-500/10 dark:text-slate-300" },
   resolved:         { Icon: CheckCircle2, cls: "text-emerald-600 border-emerald-500/40 bg-emerald-500/10 dark:text-emerald-400" },
   reopened:         { Icon: RotateCcw,    cls: "text-red-600 border-red-500/40 bg-red-500/10 dark:text-red-400" },
+  confirmed:        { Icon: ShieldCheck,  cls: "text-red-600 border-red-500/40 bg-red-500/10 dark:text-red-400" },
+  merged:           { Icon: GitMerge,     cls: "text-sky-600 border-sky-500/40 bg-sky-500/10 dark:text-sky-400" },
 }
 const FALLBACK_STYLE = { Icon: Hourglass, cls: "text-muted-foreground" }
 
 /** Keys rendered elsewhere (links, note, header) or not worth showing. */
 const SKIP_KEYS = new Set(["code", "source", "note", "by", "job_id", "detection_id", "hazard_id", "user_id"])
+/** Detail keys already rendered in the headline of a kind. */
+const HEADLINE_KEYS: Record<string, string[]> = {
+  not_seen: ["pass_number", "threshold", "job_name", "hazard_confirmed"],
+  confirmed: ["previous_code"],
+  merged: ["merged_id", "merged_code", "detections"],
+}
+
+/** Readable headline of an event ("Not seen in pass 1/3 (job …)", "Confirmed (was CL-000123)"). */
+function useEventHeadline() {
+  const { t, kindLabel } = useHzlLabels()
+  return (ev: HazardEvent): string => {
+    const d = ev.details ?? {}
+    const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null)
+    if (ev.kind === "not_seen") {
+      const i = num(d.pass_number), n = num(d.threshold)
+      const jobId = typeof d.job_id === "string" ? d.job_id : ev.job_id
+      const job = typeof d.job_name === "string" && d.job_name ? d.job_name : jobId ? jobId.slice(0, 8) : null
+      if (i != null && n != null) return job ? t("hzl.tl.notSeenPassJob", { i, n, job }) : t("hzl.tl.notSeenPass", { i, n })
+      if (job) return t("hzl.tl.notSeenJob", { job })
+    }
+    if (ev.kind === "merged") {
+      const code = typeof d.merged_code === "string" ? d.merged_code : typeof d.merged_id === "string" ? d.merged_id.slice(0, 8) : null
+      const n = num(d.detections)
+      if (code) return n != null ? t("hzl.tl.mergedN", { code, n }) : t("hzl.tl.merged", { code })
+    }
+    if (ev.kind === "confirmed") {
+      const prev = typeof d.previous_code === "string" && d.previous_code ? d.previous_code : null
+      return prev ? t("hzl.tl.confirmedFrom", { code: prev }) : t("hzl.tl.confirmed")
+    }
+    return kindLabel(ev.kind)
+  }
+}
 
 function useDetailFormatter() {
   const L = useHzlLabels()
@@ -120,8 +154,9 @@ function useDetailFormatter() {
   return (ev: HazardEvent): string[] => {
     const d = ev.details ?? {}
     const out: string[] = []
+    const skip = HEADLINE_KEYS[ev.kind] ?? []
     for (const [k, v] of Object.entries(d)) {
-      if (v == null || v === "" || SKIP_KEYS.has(k)) continue
+      if (v == null || v === "" || SKIP_KEYS.has(k) || skip.includes(k)) continue
       const label = tl(`hzl.d.${k}`, k.replace(/_/g, " "))
       let val: string
       if (k === "distance_m" && typeof v === "number") val = `${num(v)} m`
@@ -159,6 +194,7 @@ export function HazardTimeline({ hazardId, reloadKey, onOpenDetection }: {
 }) {
   const L = useHzlLabels()
   const { t, fmtDate, kindLabel, evSrcLabel } = L
+  const headline = useEventHeadline()
   const { can } = useAuth()
   const canJobs = can("jobs", "view")
   const fmtDetails = useDetailFormatter()
@@ -215,13 +251,15 @@ export function HazardTimeline({ hazardId, reloadKey, onOpenDetection }: {
                   const d = ev.details ?? {}
                   const note = typeof d.note === "string" && d.note ? d.note : null
                   const by = typeof d.by === "string" && d.by ? d.by : null
+                  const jobId = ev.job_id ?? (typeof d.job_id === "string" && d.job_id ? d.job_id : null)
+                  const detId = ev.detection_id ?? (typeof d.detection_id === "string" && d.detection_id ? d.detection_id : null)
                   return (
                     <li key={ev.id} className="relative">
                       <span className={cn("absolute -left-[31px] top-0 flex h-6 w-6 items-center justify-center rounded-full border bg-background", st.cls)}>
                         <st.Icon className="h-3.5 w-3.5" />
                       </span>
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                        <span className="font-medium">{kindLabel(ev.kind)}</span>
+                        <span className="font-medium" title={kindLabel(ev.kind)}>{headline(ev)}</span>
                         {ev.source && <Badge variant="outline" className="text-[10px]">{evSrcLabel(ev.source)}</Badge>}
                         {by && <span className="text-xs text-muted-foreground">{t("hzl.tl.by", { who: by })}</span>}
                       </div>
@@ -232,18 +270,18 @@ export function HazardTimeline({ hazardId, reloadKey, onOpenDetection }: {
                       </p>
                       {extra.length > 0 && <p className="mt-0.5 text-xs text-muted-foreground">{extra.join(" · ")}</p>}
                       {note && <p className="mt-0.5 text-xs italic">&ldquo;{note}&rdquo;</p>}
-                      {(ev.job_id || ev.detection_id) && (
+                      {(jobId || detId) && (
                         <div className="mt-1 flex flex-wrap gap-3 text-xs">
-                          {ev.job_id && (
-                            <Link href={canJobs ? `/jobs?job=${ev.job_id}` : `/detections?job_id=${ev.job_id}`}
+                          {jobId && (
+                            <Link href={canJobs ? `/jobs?job=${jobId}` : `/detections?job_id=${jobId}`}
                               className="inline-flex items-center gap-1 text-primary hover:underline">
-                              <Video className="h-3 w-3" />{t("hzl.tl.job", { id: ev.job_id.slice(0, 8) })}
+                              <Video className="h-3 w-3" />{t("hzl.tl.job", { id: jobId.slice(0, 8) })}
                             </Link>
                           )}
-                          {ev.detection_id && onOpenDetection && (
-                            <button type="button" onClick={() => onOpenDetection(ev.detection_id!)}
+                          {detId && onOpenDetection && (
+                            <button type="button" onClick={() => onOpenDetection(detId)}
                               className="inline-flex items-center gap-1 text-primary hover:underline">
-                              <Eye className="h-3 w-3" />{t("hzl.tl.detection", { id: ev.detection_id.slice(0, 8) })}
+                              <Eye className="h-3 w-3" />{t("hzl.tl.detection", { id: detId.slice(0, 8) })}
                             </button>
                           )}
                         </div>

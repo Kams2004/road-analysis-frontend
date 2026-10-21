@@ -94,7 +94,8 @@ function EvidenceBody({ id, siblings, onNavigate, onOpenCluster }: {
 
   const clip = resolveMinioUrl(d.context_clip_url)
   const place = placeParts(d)
-  const hazardCode = d.hazard?.code ?? d.hazard_code
+  // Hazard screens only link confirmed hazards: hazard_code is null for candidate-cluster members.
+  const hazardCode = d.hazard_code ?? (d.hazard && d.hazard.status !== "candidate" && d.hazard.status !== "dismissed" ? d.hazard.code : null)
   return (
     <>
       <DialogHeader className="sticky top-0 z-10 flex-row flex-wrap items-center justify-between gap-3 space-y-0 border-b bg-background/95 p-4 pr-12 backdrop-blur">
