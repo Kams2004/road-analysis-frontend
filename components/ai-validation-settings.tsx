@@ -343,6 +343,38 @@ export function AiValidationCard({ readOnly }: { readOnly: boolean }) {
             <p className="text-xs text-muted-foreground">{t("ai.set.fallbackNote")}</p>
           </div>
 
+          {PER_CLASS_TYPE in form.overrides && perClassInstalled && (() => {
+            // "not a sign" (classifier reject class): auto-reject threshold, or 1 = never (always review)
+            const nas = form.perClass[PER_CLASS_TYPE]?.not_a_sign?.auto_accept ?? ""
+            const cardNas = effPerClass.not_a_sign?.auto_accept
+            const inheritedNas = cardNas && cardNas.source !== "override" ? cardNas.value : null
+            const effective = nas !== "" ? Number(nas) : inheritedNas
+            const rejecting = effective == null || effective < 1
+            return (
+              <div className="space-y-2 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="ai-not-a-sign">{t("ai.set.notASign")}</Label>
+                  <Switch id="ai-not-a-sign" checked={rejecting} disabled={readOnly}
+                    onCheckedChange={(on) => patchPerClass(PER_CLASS_TYPE, "not_a_sign", "auto_accept", on ? "" : "1")} />
+                </div>
+                <p className="text-xs text-muted-foreground">{t("ai.set.notASignHint")}</p>
+                {rejecting ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Label htmlFor="ai-not-a-sign-th" className="text-xs text-muted-foreground">{t("ai.set.notASignThreshold")}</Label>
+                    <Input id="ai-not-a-sign-th" type="number" min={0} max={1} step={0.01} className="h-8 w-24" value={nas}
+                      disabled={readOnly} placeholder={inheritedNas != null ? String(inheritedNas) : "—"}
+                      onChange={(ev) => patchPerClass(PER_CLASS_TYPE, "not_a_sign", "auto_accept", ev.target.value)} />
+                    <span className="text-[10px] text-muted-foreground">
+                      {nas !== "" ? t("ai.src.override") : sourceLabel(cardNas?.source)}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-xs font-medium text-warning">{t("ai.set.notASignOff")}</p>
+                )}
+              </div>
+            )
+          })()}
+
           {PER_CLASS_TYPE in form.overrides && perClassInstalled && (
             <details className="space-y-1.5 rounded-lg border p-3" open={Object.keys(form.perClass[PER_CLASS_TYPE] ?? {}).length > 0 || undefined}>
               <summary className="cursor-pointer text-xs font-medium">{t("ai.set.perClass")}</summary>
