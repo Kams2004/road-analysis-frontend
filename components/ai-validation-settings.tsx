@@ -43,6 +43,7 @@ interface Form {
   mode: AiMode
   auditPct: string
   agree: boolean
+  osdMask: boolean
   overrides: Record<string, Record<ThresholdField, string>>
   /** type → sign code → verifier thresholds (traffic_sign only). */
   perClass: Record<string, Record<string, Record<PcField, string>>>
@@ -61,6 +62,7 @@ function toForm(v: AiValidationSettings, types: string[]): Form {
     mode: v.mode,
     auditPct: str(Math.round(v.audit_sample_rate * 1000) / 10),
     agree: v.require_classifier_agreement,
+    osdMask: v.ignore_osd_text_boxes ?? true,
     overrides: Object.fromEntries(all.map((ty) => [ty, Object.fromEntries(
       THRESHOLD_FIELDS.map((f) => [f, str(v.type_overrides?.[ty]?.[f])]),
     ) as Record<ThresholdField, string>])),
@@ -101,6 +103,7 @@ function fromForm(f: Form): AiValidationSettings {
     mode: f.mode,
     audit_sample_rate: pct == null ? 0 : Math.round(pct * 10) / 1000,
     require_classifier_agreement: f.agree,
+    ignore_osd_text_boxes: f.osdMask,
     type_overrides,
   }
   const minFrames = num(f.minFrames)
@@ -275,6 +278,14 @@ export function AiValidationCard({ readOnly }: { readOnly: boolean }) {
                   onCheckedChange={(v) => patch({ agree: v })} />
               </div>
               <p className="text-xs text-muted-foreground">{t("ai.set.agreeHint")}</p>
+            </div>
+            <div className="space-y-1.5 rounded-lg border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="ai-osd-mask">{t("ai.set.osdMask")}</Label>
+                <Switch id="ai-osd-mask" checked={form.osdMask} disabled={readOnly}
+                  onCheckedChange={(v) => patch({ osdMask: v })} />
+              </div>
+              <p className="text-xs text-muted-foreground">{t("ai.set.osdMaskHint")}</p>
             </div>
           </div>
 

@@ -43,6 +43,8 @@ export interface AiValidationSettings {
   pothole_max_area_ratio?: number
   /** Potholes: box touching the left/right border (1 %) and wider than 25 % → auto-reject `ai_box_too_large` (default true). */
   pothole_reject_edge_touching?: boolean
+  /** Ignore pothole / sign / bump boxes lying on the dashcam's text overlay (default on). */
+  ignore_osd_text_boxes?: boolean
 }
 
 export type PotholeOffRoadAction = "review" | "reject"
