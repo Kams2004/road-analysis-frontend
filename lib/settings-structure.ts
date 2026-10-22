@@ -7,7 +7,7 @@
  */
 import type { LucideIcon } from "lucide-react"
 import {
-  Ban, BrainCircuit, Car, CircleDot, Cpu, Hourglass, Layers, Mail, Map as MapIcon, Plug, Route, Shapes, ShieldCheck, Siren,
+  Ban, BrainCircuit, Car, CircleDot, Cpu, Hourglass, Layers, Mail, Map as MapIcon, Plug, Route, ShieldCheck, Siren,
   Signpost, Smartphone, TrafficCone, Users,
 } from "lucide-react"
 import type { Tone } from "@/components/stat-card"
@@ -61,9 +61,7 @@ export const SETTINGS_MODULES: SettingsModule[] = [
     pages: [
       { id: "validation", href: "/settings/hazards", labelKey: "set.page.validation", descKey: "set.page.validation.desc", icon: Layers, tone: "orange",
         anchors: ["validation"] },
-      // The global Cluster Configuration has its own page (sidebar → Cluster configuration).
-      { id: "clustering", href: "/clustering", labelKey: "set.page.clustering", descKey: "set.page.clustering.desc", icon: Shapes, tone: "teal",
-        anchors: ["cluster-areas", "cluster-radius", "clustering"] },
+      // Cluster configuration is not a setting page: it has its own page (sidebar → AI Hazard Detection).
       { id: "lifecycle", href: "/settings/hazards/lifecycle", labelKey: "set.page.lifecycle", descKey: "set.page.lifecycle.desc", icon: Hourglass, tone: "red" },
       { id: "rejection-reasons", href: "/settings/hazards/rejection-reasons", labelKey: "set.page.rejectionReasons", descKey: "set.page.rejectionReasons.desc", icon: Ban, tone: "slate" },
     ],

@@ -35,8 +35,9 @@ function uniqueId(base: string, taken: Set<string>) {
 const validCoord = (e: RouteEndpoint) =>
   Number.isFinite(e.lat) && Number.isFinite(e.lon) && Math.abs(e.lat) <= 90 && Math.abs(e.lon) <= 180
 
-function EndpointEditor({ label, value, onChange, readOnly, idBase }: {
-  label: string; value: RouteEndpoint; onChange: (e: RouteEndpoint) => void; readOnly: boolean; idBase: string
+function EndpointEditor({ label, placeholder, value, onChange, readOnly, idBase }: {
+  label: string; placeholder: string; value: RouteEndpoint; onChange: (e: RouteEndpoint) => void; readOnly: boolean
+  idBase: string
 }) {
   const t = useT()
   const num = (raw: string) => (raw.trim() === "" ? NaN : Number(raw))
@@ -55,7 +56,7 @@ function EndpointEditor({ label, value, onChange, readOnly, idBase }: {
           id={`${idBase}-place`} compact
           value={place}
           onChange={(p) => { if (p) onChange({ lat: +p.lat.toFixed(6), lon: +p.lon.toFixed(6), label: p.label }) }}
-          placeholder={t("rt.fromPh")}
+          placeholder={placeholder}
         />
       )}
       <div className="grid grid-cols-3 gap-1.5">
@@ -100,7 +101,10 @@ function RouteSectionsCard({ data, onSaved, readOnly }: {
     if (id !== r.id) update(i, { id })
   }
 
+  const invalid = rows.some((r) => !r.name.trim() || !validCoord(r.from) || !validCoord(r.to))
+
   const add = () => {
+    if (invalid) return                                  // finish the incomplete section first
     const taken = new Set(rows.map((r) => r.id))
     const name = t("rt.set.newName")
     setRows([...rows, {
@@ -108,8 +112,6 @@ function RouteSectionsCard({ data, onSaved, readOnly }: {
       from: { lat: NaN, lon: NaN, label: "" }, to: { lat: NaN, lon: NaN, label: "" },
     }])
   }
-
-  const invalid = rows.some((r) => !r.name.trim() || !validCoord(r.from) || !validCoord(r.to))
 
   return (
     <SectionCard id="routes" className="xl:col-span-2" icon={Route} tone="teal"
@@ -124,7 +126,7 @@ function RouteSectionsCard({ data, onSaved, readOnly }: {
             const bad = !r.name.trim() || !validCoord(r.from) || !validCoord(r.to)
             return (
               <li key={i} className="rounded-lg border border-border p-3">
-                <div className="grid gap-3 lg:grid-cols-[minmax(10rem,1fr)_2fr_2fr_auto] lg:items-start">
+                <div className="grid gap-3 lg:grid-cols-[minmax(14rem,1.4fr)_2fr_2fr_auto] lg:items-start">
                   <div className="space-y-1.5">
                     <Label htmlFor={`rs-name-${i}`} className="text-[11px] text-muted-foreground">{t("rt.set.name")}</Label>
                     <Input
@@ -134,9 +136,9 @@ function RouteSectionsCard({ data, onSaved, readOnly }: {
                     />
                     <p className="truncate font-mono text-[10px] text-muted-foreground" title={r.id}>{r.id}</p>
                   </div>
-                  <EndpointEditor idBase={`rs-${i}-from`} label={t("hist.route.from")} value={r.from}
+                  <EndpointEditor idBase={`rs-${i}-from`} label={t("hist.route.from")} placeholder={t("rt.fromPh")} value={r.from}
                                   onChange={(from) => update(i, { from })} readOnly={readOnly} />
-                  <EndpointEditor idBase={`rs-${i}-to`} label={t("hist.route.to")} value={r.to}
+                  <EndpointEditor idBase={`rs-${i}-to`} label={t("hist.route.to")} placeholder={t("rt.toPh")} value={r.to}
                                   onChange={(to) => update(i, { to })} readOnly={readOnly} />
                   {!readOnly && (
                     <Button
@@ -157,9 +159,13 @@ function RouteSectionsCard({ data, onSaved, readOnly }: {
       )}
       <SaveBar form={invalid ? { ...form, dirty: false } : form} readOnly={readOnly} t={t}>
         {!readOnly && (
-          <Button type="button" variant="outline" size="sm" className="mr-auto gap-1.5" onClick={add}>
-            <Plus className="h-4 w-4" /> {t("rt.set.add")}
-          </Button>
+          <div className="mr-auto flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={add} disabled={invalid}
+                    title={invalid ? t("rt.set.finishFirst") : undefined}>
+              <Plus className="h-4 w-4" /> {t("rt.set.add")}
+            </Button>
+            {invalid && <span className="text-xs text-muted-foreground">{t("rt.set.finishFirst")}</span>}
+          </div>
         )}
       </SaveBar>
     </SectionCard>

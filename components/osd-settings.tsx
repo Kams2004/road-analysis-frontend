@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useAuth } from "@/components/auth-provider"
 import { errorText } from "@/lib/auth-api"
 import { useT } from "@/lib/i18n"
@@ -136,12 +137,18 @@ export function OsdSettingsCard() {
     if (!current) return
     edit({ fields: current.fields.map((f, j) => (j === i ? { ...f, ...patch } : f)) })
   }
-  const copyProfile = () => {
-    if (!current) return
-    const name = window.prompt(t(`${SCOPE}.newName`), `${selected}_2`)?.trim().toLowerCase()
-    if (!name || !/^[a-z0-9][a-z0-9_-]{1,39}$/.test(name) || names.includes(name)) return
+  const [newName, setNewName] = useState<string | null>(null)   // "New profile" dialog (null = closed)
+  const newNameClean = (newName ?? "").trim().toLowerCase()
+  const newNameError = !newNameClean ? null
+    : !/^[a-z0-9][a-z0-9_-]{1,39}$/.test(newNameClean) ? t(`${SCOPE}.newNameInvalid`)
+    : names.includes(newNameClean) ? t(`${SCOPE}.newNameTaken`) : null
+  const copyProfile = () => { if (current) setNewName(`${selected}_2`) }
+  const confirmCopy = () => {
+    if (!current || !newNameClean || newNameError) return
+    const name = newNameClean
     setProfiles((p) => ({ ...p, [name]: { ...JSON.parse(JSON.stringify(current)), label: name, aliases: [] } }))
     setSelected(name)
+    setNewName(null)
   }
   const removeProfile = () => {
     setProfiles((p) => { const n = { ...p }; delete n[selected]; return n })
@@ -316,6 +323,21 @@ export function OsdSettingsCard() {
           </Button>
         </div>
       )}
+      <Dialog open={newName !== null} onOpenChange={(o) => { if (!o) setNewName(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>{t(`${SCOPE}.newProfile`)}</DialogTitle></DialogHeader>
+          <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); confirmCopy() }}>
+            <Label htmlFor="osd-new-name" className="text-xs font-medium">{t(`${SCOPE}.newName`)}</Label>
+            <Input id="osd-new-name" autoFocus value={newName ?? ""} onChange={(e) => setNewName(e.target.value)}
+                   aria-invalid={!!newNameError} />
+            {newNameError && <p className="text-xs text-destructive">{newNameError}</p>}
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setNewName(null)}>{t("common.cancel")}</Button>
+              <Button type="submit" disabled={!newNameClean || !!newNameError}>{t("common.create")}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </SectionCard>
   )
 }

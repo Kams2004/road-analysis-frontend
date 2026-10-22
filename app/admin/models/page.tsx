@@ -162,7 +162,7 @@ function AiModels() {
         )}
       </SectionCard>
 
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="grid gap-5 xl:grid-cols-2 [&>*]:min-w-0">
         {installed.map((m) => <ModelCardView key={m.key} slot={m} models={models} />)}
       </div>
       {missing > 0 && <p className="text-xs text-muted-foreground">{t("ai.models.notInstalled", { n: missing })}</p>}
@@ -202,7 +202,11 @@ function ModelCardView({ slot, models }: { slot: ModelSlot; models: ModelsOut })
   const card = slot.card
   const eff = models.thresholds[slot.detection_type]
   const fields = slot.role === "classifier" ? (["auto_accept", "auto_reject"] as const) : (["detector_accept", "detector_reject"] as const)
-  const globalMetrics = card ? Object.entries(card.metrics ?? {}).filter(([k, v]) => k !== "per_class" && (v == null || typeof v !== "object")) : []
+  const allMetrics = card ? Object.entries(card.metrics ?? {}).filter(([k, v]) => k !== "per_class" && (v == null || typeof v !== "object")) : []
+  // Short values as chips; long texts (decision rule, notes) as wrapped lines under them.
+  const isNote = (v: unknown) => typeof v === "string" && v.length > 32
+  const globalMetrics = allMetrics.filter(([, v]) => !isNote(v))
+  const metricNotes = allMetrics.filter(([, v]) => isNote(v))
   return (
     <SectionCard icon={slot.role === "classifier" ? ShieldCheck : ScanSearch} tone={slot.role === "classifier" ? "purple" : "blue"}
       title={<>{t(`ai.slot.${slot.key}`)}{card && <span className="ml-2 font-mono text-xs text-muted-foreground">{card.name}:{card.version}</span>}</>}
@@ -246,14 +250,28 @@ function ModelCardView({ slot, models }: { slot: ModelSlot; models: ModelsOut })
             </dd>
           </dl>
 
-          {globalMetrics.length > 0 && (
-            <div className="space-y-1">
+          {allMetrics.length > 0 && (
+            <div className="min-w-0 space-y-1.5">
               <h4 className="text-xs font-medium text-muted-foreground">{t("ai.card.metrics")}</h4>
-              <div className="flex flex-wrap gap-1.5">
-                {globalMetrics.map(([k, v]) => (
-                  <Badge key={k} variant="secondary" className="font-normal"><span className="mr-1 text-muted-foreground">{k}</span>{fmtMetric(v)}</Badge>
-                ))}
-              </div>
+              {globalMetrics.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {globalMetrics.map(([k, v]) => (
+                    <Badge key={k} variant="secondary" className="max-w-full whitespace-normal break-all font-normal">
+                      <span className="mr-1 text-muted-foreground">{k}</span>{fmtMetric(v)}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              {metricNotes.length > 0 && (
+                <dl className="space-y-1 rounded-md bg-muted/50 p-2.5 text-xs">
+                  {metricNotes.map(([k, v]) => (
+                    <div key={k} className="min-w-0">
+                      <dt className="font-medium text-muted-foreground">{k}</dt>
+                      <dd className="whitespace-pre-wrap break-words">{fmtMetric(v)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
             </div>
           )}
 
@@ -270,7 +288,7 @@ function ModelCardView({ slot, models }: { slot: ModelSlot; models: ModelsOut })
               )}
               {eff && fields.map((f) => (
                 <Badge key={f} variant="secondary">
-                  {t(`ai.th.${f}`)} = {fmtMetric(eff[f].value)} · {eff[f].source ? t(`ai.src.${eff[f].source}`) : t("ai.src.none")}
+                  {t(`ai.th.${f}`)} {fmtMetric(eff[f].value)} · {eff[f].source ? t(`ai.src.${eff[f].source}`) : t("ai.src.none")}
                 </Badge>
               ))}
             </div>

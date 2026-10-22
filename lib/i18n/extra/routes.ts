@@ -37,6 +37,7 @@ export const en: Record<string, string> = {
   "rt.set.empty": "No predefined road section. Add one to offer it in the route searches.",
   "rt.set.invalid": "Give the section a name and pick both endpoints (valid latitude / longitude).",
   "rt.set.newName": "New section",
+  "rt.set.finishFirst": "Complete or delete the unfinished section before adding another.",
 }
 
 export const fr: Record<string, string> = {
@@ -72,6 +73,7 @@ export const fr: Record<string, string> = {
   "rt.set.empty": "Aucun tronçon prédéfini. Ajoutez-en un pour le proposer dans les recherches d'itinéraire.",
   "rt.set.invalid": "Donnez un nom au tronçon et choisissez ses deux extrémités (latitude / longitude valides).",
   "rt.set.newName": "Nouveau tronçon",
+  "rt.set.finishFirst": "Complétez ou supprimez le tronçon inachevé avant d'en ajouter un autre.",
 }
 
 export const es: Record<string, string> = {
@@ -107,4 +109,5 @@ export const es: Record<string, string> = {
   "rt.set.empty": "Ningún tramo predefinido. Añada uno para ofrecerlo en las búsquedas de ruta.",
   "rt.set.invalid": "Dé un nombre al tramo y elija sus dos extremos (latitud / longitud válidas).",
   "rt.set.newName": "Nuevo tramo",
+  "rt.set.finishFirst": "Complete o elimine el tramo sin terminar antes de añadir otro.",
 }

@@ -1,5 +1,6 @@
 "use client"
 
+import { toast } from "sonner"
 import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import Image from "next/image"
 import dynamic from "next/dynamic"
@@ -313,7 +314,7 @@ export default function SignalementsPage() {
       if (selected?.id === toDelete.id) setSelected(null)
       setToDelete(null)
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : t("pmap.sig.deleteFailed"))
+      toast.error(e instanceof Error ? e.message : t("pmap.sig.deleteFailed"))
     } finally {
       setDelBusy(false)
     }

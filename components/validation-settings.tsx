@@ -24,7 +24,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useAuth } from "@/components/auth-provider"
 import { AiValidationCard } from "@/components/ai-validation-settings"
-import { ClusterConfigLinkCard } from "@/components/clustering/cluster-config-link"
 import { useM6Labels } from "@/components/m6-shared"
 import { ApiError, errorText } from "@/lib/auth-api"
 import {
@@ -262,7 +261,6 @@ export function ValidationSettingsSection() {
       <SectionHeading title={t("m6.set.sectionTitle")} description={t("m6.set.sectionHint")} />
       <AiValidationCard readOnly={readOnly} />
       <ValidationRulesCard readOnly={readOnly} />
-      <ClusterConfigLinkCard />
     </section>
   )
 }

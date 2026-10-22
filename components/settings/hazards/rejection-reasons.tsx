@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { Ban, Loader2, Pencil, Plus } from "lucide-react"
+import { Ban, Loader2, Pencil, Plus, Search } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,10 +18,11 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { SectionCard } from "@/components/section-card"
+import { TablePagination } from "@/components/table-pagination"
 import { LoadingBlock } from "@/components/settings/form-kit"
 import { useM6Labels } from "@/components/m6-shared"
 import {
-  REJECTION_KINDS, createRejectionReason, fetchRejectionReasons, updateRejectionReason,
+  REJECTION_KINDS, createRejectionReason, fetchRejectionReasonPage, fetchRejectionReasonTypes, updateRejectionReason,
   type RejectionKind, type RejectionReason,
 } from "@/lib/api"
 import { DETECTION_TYPES } from "@/lib/module6-api"
@@ -65,32 +66,79 @@ const toCode = (label: string) => label.toLowerCase().normalize("NFD").replace(/
 
 interface Draft { label: string; description: string; kind: RejectionKind }
 
+const PAGE_SIZE = 10
+
 export function RejectionReasonsSettings({ readOnly }: { readOnly: boolean }) {
+  const { t } = useM6Labels()
+  const [types, setTypes] = useState<{ detection_type: string; total: number }[] | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const loadTypes = useCallback(async () => {
+    try {
+      setTypes(await fetchRejectionReasonTypes())
+    } catch (err) {
+      setTypes([])
+      toast.error(t("rr.loadFailed"), { description: err instanceof Error ? err.message : undefined })
+    }
+  }, [t])
+  useEffect(() => { void loadTypes() }, [loadTypes])
+
+  const allTypes = useMemo(() => {
+    const counts = new Map((types ?? []).map((x) => [x.detection_type, x.total]))
+    return [...new Set([...DETECTION_TYPES, ...counts.keys()])].map((type) => ({ type, total: counts.get(type) ?? 0 }))
+  }, [types])
+
+  if (types === null) return <LoadingBlock />
+
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">{t("rr.intro")}</p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {REJECTION_KINDS.map((k) => (
+          <div key={k} className="rounded-lg border bg-card p-3">
+            <RejectionKindBadge kind={k} />
+            <p className="mt-1.5 text-sm font-medium">{t(`rej.kind.${k}`)}</p>
+            <p className="text-xs text-muted-foreground">{t(`rej.kind.${k}.help`)}</p>
+          </div>
+        ))}
+      </div>
+
+      {!readOnly && <AddReasonCard onAdded={() => { void loadTypes(); setReloadKey((n) => n + 1) }} />}
+
+      {allTypes.map(({ type, total }) => (
+        <ReasonTypeTable key={type} type={type} total={total} readOnly={readOnly} reloadKey={reloadKey} />
+      ))}
+    </div>
+  )
+}
+
+/** The reasons of one detection type, fetched one page at a time (GET /rejection-reasons/page). */
+function ReasonTypeTable({ type, total: initialTotal, readOnly, reloadKey }: {
+  type: string; total: number; readOnly: boolean; reloadKey: number
+}) {
   const { t, tl, typeLabel } = useM6Labels()
-  const [reasons, setReasons] = useState<RejectionReason[] | null>(null)
+  const [page, setPage] = useState(1)
+  const [query, setQuery] = useState("")
+  const [data, setData] = useState<{ total: number; items: RejectionReason[] } | null>(null)
+  const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft>({ label: "", description: "", kind: "false_positive" })
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(async () => {
-    try {
-      setReasons(await fetchRejectionReasons())
-    } catch (err) {
-      setReasons([])
-      toast.error(t("rr.loadFailed"), { description: err instanceof Error ? err.message : undefined })
-    }
-  }, [t])
-  useEffect(() => { void load() }, [load])
-
-  const byType = useMemo(() => {
-    const types = [...DETECTION_TYPES, ...new Set((reasons ?? []).map((r) => r.detection_type))]
-    return [...new Set(types)].map((type) => ({
-      type,
-      items: (reasons ?? []).filter((r) => r.detection_type === type)
-        .sort((a, b) => REJECTION_KINDS.indexOf(kindOf(a)) - REJECTION_KINDS.indexOf(kindOf(b))
-          || Number(a.is_custom) - Number(b.is_custom) || a.code.localeCompare(b.code)),
-    }))
-  }, [reasons])
+  useEffect(() => { setPage(1) }, [query])
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    const timer = setTimeout(() => {
+      fetchRejectionReasonPage(type, { skip: (page - 1) * PAGE_SIZE, limit: PAGE_SIZE, q: query })
+        .then((d) => { if (!cancelled) setData(d) })
+        .catch((err) => {
+          if (!cancelled) toast.error(t("rr.loadFailed"), { description: err instanceof Error ? err.message : undefined })
+        })
+        .finally(() => { if (!cancelled) setLoading(false) })
+    }, query ? 300 : 0)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [type, page, query, reloadKey, t])
 
   const startEdit = (r: RejectionReason) => {
     setEditing(r.id)
@@ -106,7 +154,7 @@ export function RejectionReasonsSettings({ readOnly }: { readOnly: boolean }) {
     setBusy(true)
     try {
       const updated = await updateRejectionReason(r.id, body)
-      setReasons((xs) => (xs ?? []).map((x) => (x.id === r.id ? { ...x, ...updated } : x)))
+      setData((d) => d && { ...d, items: d.items.map((x) => (x.id === r.id ? { ...x, ...updated } : x)) })
       setEditing(null)
       toast.success(t("rr.saved"), body.kind ? { description: t("rr.kindChanged") } : undefined)
     } catch (err) {
@@ -116,97 +164,93 @@ export function RejectionReasonsSettings({ readOnly }: { readOnly: boolean }) {
     }
   }
 
-  if (reasons === null) return <LoadingBlock />
+  const total = data?.total ?? initialTotal
+  const items = data?.items ?? []
 
   return (
-    <div className="space-y-6">
-      <p className="text-sm text-muted-foreground">{t("rr.intro")}</p>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {REJECTION_KINDS.map((k) => (
-          <div key={k} className="rounded-lg border bg-card p-3">
-            <RejectionKindBadge kind={k} />
-            <p className="mt-1.5 text-sm font-medium">{t(`rej.kind.${k}`)}</p>
-            <p className="text-xs text-muted-foreground">{t(`rej.kind.${k}.help`)}</p>
-          </div>
-        ))}
-      </div>
-
-      {!readOnly && <AddReasonCard onAdded={(r) => setReasons((xs) => [...(xs ?? []), r])} />}
-
-      {byType.map(({ type, items }) => (
-        <SectionCard key={type} id={`reasons-${type}`} icon={Ban} tone="slate" title={typeLabel(type)}
-          badge={<Badge variant="secondary" className="text-[10px]">{items.length}</Badge>} contentClassName="p-0">
-          {!items.length ? (
-            <p className="px-5 py-4 text-sm text-muted-foreground">{t("rr.empty")}</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="pl-5">{t("rr.col.label")}</TableHead>
-                    <TableHead className="hidden md:table-cell">{t("rr.col.description")}</TableHead>
-                    <TableHead className="w-60">{t("rr.col.kind")}</TableHead>
-                    <TableHead className="w-24">{t("rr.col.origin")}</TableHead>
-                    <TableHead className="w-24 pr-5 text-right" />
+    <SectionCard id={`reasons-${type}`} icon={Ban} tone="slate" title={typeLabel(type)}
+      badge={<Badge variant="secondary" className="text-[10px]">{initialTotal}</Badge>} contentClassName="p-0">
+      {initialTotal > PAGE_SIZE && (
+        <div className="relative border-b border-border px-5 py-3">
+          <Search className="pointer-events-none absolute left-7 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input className="h-8 max-w-sm pl-7 text-sm" value={query} placeholder={t("rr.search")}
+                 aria-label={t("rr.search")} onChange={(e) => setQuery(e.target.value)} />
+        </div>
+      )}
+      {data === null ? (
+        <div className="flex justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+      ) : !items.length ? (
+        <p className="px-5 py-4 text-sm text-muted-foreground">{query ? t("rr.noMatch") : t("rr.empty")}</p>
+      ) : (
+        <div className={cn("overflow-x-auto transition-opacity", loading && "opacity-60")}>
+          <Table className="table-fixed">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[26%] pl-5">{t("rr.col.label")}</TableHead>
+                <TableHead className="hidden md:table-cell">{t("rr.col.description")}</TableHead>
+                <TableHead className="w-44">{t("rr.col.kind")}</TableHead>
+                <TableHead className="w-24">{t("rr.col.origin")}</TableHead>
+                <TableHead className="w-24 pr-5 text-right" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((r) => {
+                const isEditing = editing === r.id
+                const kind = kindOf(r)
+                return (
+                  <TableRow key={r.id} className="align-top">
+                    <TableCell className="whitespace-normal break-words pl-5">
+                      {isEditing ? (
+                        <Input className="h-8 text-sm" value={draft.label} aria-label={t("rr.col.label")}
+                          onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))} />
+                      ) : (
+                        <span className="block text-sm font-medium">{tl(`rej.code.${r.code}`, r.label)}</span>
+                      )}
+                      <code className="break-all text-[11px] text-muted-foreground">{r.code}</code>
+                    </TableCell>
+                    <TableCell className="hidden whitespace-normal break-words md:table-cell">
+                      {isEditing ? (
+                        <Input className="h-8 text-sm" value={draft.description} aria-label={t("rr.col.description")}
+                          onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">{r.description && r.description !== r.label ? r.description : "—"}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {isEditing ? (
+                        <KindSelect value={draft.kind} onChange={(k) => setDraft((d) => ({ ...d, kind: k }))} disabled={busy} />
+                      ) : (
+                        <span title={r.is_custom ? undefined : t("rr.systemFixed")}><RejectionKindBadge kind={kind} /></span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground">{r.is_custom ? t("rr.custom") : t("rr.system")}</span>
+                    </TableCell>
+                    <TableCell className="pr-5 text-right">
+                      {r.is_custom && !readOnly && (isEditing ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <Button size="sm" className="h-8" disabled={busy || !draft.label.trim()} onClick={() => void save(r)}>
+                            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{t("rr.save")}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-8" disabled={busy} onClick={() => setEditing(null)}>{t("common.cancel")}</Button>
+                        </div>
+                      ) : (
+                        <Button size="sm" variant="ghost" className="h-8" title={t("rr.edit")} aria-label={t("rr.edit")} onClick={() => startEdit(r)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      ))}
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((r) => {
-                    const isEditing = editing === r.id
-                    const kind = kindOf(r)
-                    return (
-                      <TableRow key={r.id} className="align-top">
-                        <TableCell className="pl-5">
-                          {isEditing ? (
-                            <Input className="h-8 text-sm" value={draft.label} aria-label={t("rr.col.label")}
-                              onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))} />
-                          ) : (
-                            <span className="block text-sm font-medium">{tl(`rej.code.${r.code}`, r.label)}</span>
-                          )}
-                          <code className="text-[11px] text-muted-foreground">{r.code}</code>
-                        </TableCell>
-                        <TableCell className="hidden max-w-xs md:table-cell">
-                          {isEditing ? (
-                            <Input className="h-8 text-sm" value={draft.description} aria-label={t("rr.col.description")}
-                              onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} />
-                          ) : (
-                            <span className="text-xs text-muted-foreground">{r.description && r.description !== r.label ? r.description : "—"}</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {isEditing ? (
-                            <KindSelect value={draft.kind} onChange={(k) => setDraft((d) => ({ ...d, kind: k }))} disabled={busy} />
-                          ) : (
-                            <span title={r.is_custom ? undefined : t("rr.systemFixed")}><RejectionKindBadge kind={kind} /></span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-xs text-muted-foreground">{r.is_custom ? t("rr.custom") : t("rr.system")}</span>
-                        </TableCell>
-                        <TableCell className="pr-5 text-right">
-                          {r.is_custom && !readOnly && (isEditing ? (
-                            <div className="flex justify-end gap-1">
-                              <Button size="sm" className="h-8" disabled={busy || !draft.label.trim()} onClick={() => void save(r)}>
-                                {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{t("rr.save")}
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-8" disabled={busy} onClick={() => setEditing(null)}>{t("common.cancel")}</Button>
-                            </div>
-                          ) : (
-                            <Button size="sm" variant="ghost" className="h-8" title={t("rr.edit")} aria-label={t("rr.edit")} onClick={() => startEdit(r)}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                          ))}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </SectionCard>
-      ))}
-    </div>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+      {total > PAGE_SIZE && (
+        <TablePagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />
+      )}
+    </SectionCard>
   )
 }
 

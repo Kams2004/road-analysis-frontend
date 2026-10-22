@@ -198,6 +198,27 @@ export async function fetchRejectionReasons(detection_type?: string): Promise<Re
   return res.json()
 }
 
+export interface RejectionReasonPage { total: number; items: RejectionReason[] }
+
+/** One page of the reasons of exactly one detection type (settings page). */
+export async function fetchRejectionReasonPage(detection_type: string, opts: {
+  skip?: number; limit?: number; q?: string; kind?: RejectionKind
+} = {}): Promise<RejectionReasonPage> {
+  const qs = new URLSearchParams({ detection_type, skip: String(opts.skip ?? 0), limit: String(opts.limit ?? 10) })
+  if (opts.q?.trim()) qs.set("q", opts.q.trim())
+  if (opts.kind) qs.set("kind", opts.kind)
+  const res = await fetch(`${API_BASE}/rejection-reasons/page?${qs}`, { cache: "no-store" })
+  if (!res.ok) throw new Error("Failed to fetch rejection reasons")
+  return res.json()
+}
+
+/** Number of reasons per detection type. */
+export async function fetchRejectionReasonTypes(): Promise<{ detection_type: string; total: number }[]> {
+  const res = await fetch(`${API_BASE}/rejection-reasons/types`, { cache: "no-store" })
+  if (!res.ok) throw new Error("Failed to fetch rejection reasons")
+  return res.json()
+}
+
 export async function createRejectionReason(body: {
   detection_type: string; code: string; label: string; description: string; kind?: RejectionKind
 }): Promise<RejectionReason> {

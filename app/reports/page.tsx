@@ -21,6 +21,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { PlaceAutocomplete } from "@/components/place-autocomplete"
 import { RouteSectionSelect, useRouteSections } from "@/components/route-search-bar"
 import { parseUtc } from "@/components/dashboard/types"
@@ -210,13 +214,20 @@ function Reports() {
     }
   }
 
-  const remove = async (r: Report) => {
-    if (!window.confirm(t("rep.confirmDelete", { title: r.title }))) return
+  const [toDelete, setToDelete] = useState<Report | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const remove = (r: Report) => setToDelete(r)
+  const confirmRemove = async () => {
+    if (!toDelete) return
+    setDeleting(true)
     try {
-      await api(`reports/${r.id}`, { method: "DELETE" })
+      await api(`reports/${toDelete.id}`, { method: "DELETE" })
+      setToDelete(null)
       setReload((n) => n + 1)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -523,6 +534,22 @@ function Reports() {
           </div>
         )}
       </Panel>
+
+      <AlertDialog open={!!toDelete} onOpenChange={(o) => { if (!o && !deleting) setToDelete(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("rep.delete")}</AlertDialogTitle>
+            <AlertDialogDescription>{toDelete ? t("rep.confirmDelete", { title: toDelete.title }) : ""}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction disabled={deleting} className="bg-destructive text-white hover:bg-destructive/90"
+                               onClick={(e) => { e.preventDefault(); void confirmRemove() }}>
+              {t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
