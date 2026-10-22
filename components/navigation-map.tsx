@@ -219,7 +219,7 @@ export default function NavigationMap({
       `}</style>
       <link
         rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        href="/vendor/leaflet/leaflet.css"
       />
       <div className="relative w-full h-full">
         <div ref={containerRef} className="w-full h-full" />

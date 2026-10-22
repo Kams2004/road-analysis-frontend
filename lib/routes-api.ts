@@ -64,42 +64,17 @@ export async function fetchRoutePreview(from: LatLon, to: LatLon, alternatives =
 
 const CAMEROON: ViewBox = [8.4, 13.1, 16.2, 1.6]
 
-interface NominatimRow {
-  name?: string
-  display_name: string
-  lat: string
-  lon: string
-  address?: Record<string, string>
-}
-
-const arrondissement = (c?: string) => c?.replace(/\s+[IVX]{1,4}$/, "")
-
-function fromNominatim(r: NominatimRow): Place {
-  const a = r.address ?? {}
-  const parts = r.display_name.split(", ")
-  const label = r.name || parts[0]
-  const city = arrondissement(a.city ?? a.town ?? a.village ?? a.municipality)
-  const secondary = [...new Set([city !== label ? city : undefined, a.state].filter(Boolean))].join(", ")
-  return { label, secondary: secondary || parts.slice(1, 3).join(", "), lat: Number(r.lat), lon: Number(r.lon) }
-}
-
+/** Place autocomplete through the API's server-side geocoder (the browser never calls Nominatim). */
 export async function searchPlaces(q: string, lang: string, signal?: AbortSignal, viewbox?: ViewBox | null): Promise<Place[]> {
   const vb = (viewbox ?? CAMEROON).map((n) => n.toFixed(4)).join(",")
   try {
     const qs = new URLSearchParams({ q, lang, viewbox: vb })
     const r = await fetch(`${P}/routes/geocode/search?${qs}`, { cache: "no-store", signal })
-    if (r.ok) return (await r.json()) as Place[]
-    if (r.status === 401 || r.status === 403) return []
+    return r.ok ? ((await r.json()) as Place[]) : []
   } catch (e) {
     if ((e as Error).name === "AbortError") throw e
+    return []
   }
-  // Fallback: Nominatim directly from the browser.
-  const qs = new URLSearchParams({
-    q, format: "jsonv2", limit: "6", countrycodes: "cm", addressdetails: "1", viewbox: vb, "accept-language": lang,
-  })
-  const r = await fetch(`https://nominatim.openstreetmap.org/search?${qs}`, { signal })
-  if (!r.ok) return []
-  return ((await r.json()) as NominatimRow[]).map(fromNominatim)
 }
 
 export async function reversePlace(lat: number, lon: number, lang: string): Promise<Place> {
@@ -107,20 +82,7 @@ export async function reversePlace(lat: number, lon: number, lang: string): Prom
   try {
     const qs = new URLSearchParams({ lat: String(lat), lon: String(lon), lang })
     const r = await fetch(`${P}/routes/geocode/reverse?${qs}`, { cache: "no-store" })
-    if (r.ok) return { ...(await r.json()), lat, lon }
-  } catch { /* fall through */ }
-  try {
-    const qs = new URLSearchParams({
-      lat: String(lat), lon: String(lon), format: "jsonv2", zoom: "16", addressdetails: "1", "accept-language": lang,
-    })
-    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?${qs}`)
-    if (!r.ok) return fallback
-    const d: NominatimRow = await r.json()
-    const a = d.address ?? {}
-    const local = a.suburb ?? a.neighbourhood ?? a.quarter ?? a.road
-    const city = arrondissement(a.city ?? a.town ?? a.village ?? a.municipality)
-    const label = [...new Set([local, city].filter(Boolean))].join(", ")
-    return { ...fallback, label: label || fallback.label, secondary: a.state }
+    return r.ok ? { ...(await r.json()), lat, lon } : fallback
   } catch {
     return fallback
   }

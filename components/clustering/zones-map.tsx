@@ -236,7 +236,7 @@ export function ZonesMap(props: ZonesMapProps) {
 
   return (
     <>
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+      <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
       <div className={cn("relative isolate overflow-hidden rounded-xl border", className)}>
         <div ref={boxRef} className="h-full w-full" />
         <div className="pointer-events-none absolute bottom-2 left-2 z-[1000] space-y-1 rounded-md bg-background/90 px-2.5 py-1.5 text-[11px] shadow-sm">

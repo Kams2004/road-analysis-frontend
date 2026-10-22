@@ -245,7 +245,7 @@ export function ClusterMap({
   const types = DETECTION_TYPES.filter((ty) => clusters.some((h) => h.type === ty))
   return (
     <>
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+      <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
       <div className={cn("relative isolate overflow-hidden rounded-xl border bg-muted", className)}>
         <div ref={boxRef} className="h-full w-full" />
         {/* Legend */}

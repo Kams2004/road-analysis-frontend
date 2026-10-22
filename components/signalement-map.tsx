@@ -187,7 +187,7 @@ export default function SignalementMap({
 
   return (
     <>
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+      <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
       <div ref={containerRef} className="relative z-0 h-full w-full" />
     </>
   )

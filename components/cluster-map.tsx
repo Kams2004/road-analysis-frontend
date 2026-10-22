@@ -49,9 +49,9 @@ export default function ClusterMap({ clusters, radiusM, onClusterClick }: Cluste
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       delete (L.Icon.Default.prototype as any)._getIconUrl
       L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+        iconRetinaUrl: "/vendor/leaflet/images/marker-icon-2x.png",
+        iconUrl: "/vendor/leaflet/images/marker-icon.png",
+        shadowUrl: "/vendor/leaflet/images/marker-shadow.png",
       })
 
       const center: [number, number] = clusters.length > 0
@@ -94,7 +94,7 @@ export default function ClusterMap({ clusters, radiusM, onClusterClick }: Cluste
 
   return (
     <>
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+      <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
       <div className="relative w-full h-full">
         <div ref={containerRef} className="w-full h-full" />
         {(tiles.fallbackReason === "google_not_configured" || tiles.fallbackReason === "google_unavailable") && (

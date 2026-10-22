@@ -19,6 +19,7 @@ import {
 } from "@/lib/recent-destinations"
 import type { LatLng } from "@/components/navigation-map"
 import { useT } from "@/lib/i18n"
+import { fetchRoutePreview, reversePlace, searchPlaces as apiSearchPlaces } from "@/lib/routes-api"
 import { RequirePermission } from "@/components/require-permission"
 
 function NavMapLoading() {
@@ -39,7 +40,7 @@ const NavigationMap = dynamic(() => import("@/components/navigation-map"), {
   loading: () => <NavMapLoading />,
 })
 
-// ─── Nominatim geocoding helper ───────────────────────────────────────────────
+// ─── Geocoding helpers ───────────────────────────────────────────────
 interface NominatimResult {
   place_id: number
   display_name: string
@@ -53,39 +54,21 @@ interface NominatimResult {
   }
 }
 
+// Through the platform API (server-side geocoder) — the browser never calls Nominatim itself.
 async function searchPlaces(query: string): Promise<NominatimResult[]> {
   if (!query.trim()) return []
-  const params = new URLSearchParams({
-    q: query,
-    format: "json",
-    limit: "6",
-    addressdetails: "1",
-  })
-  const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?${params}`,
-    { headers: { "Accept-Language": "en" } }
-  )
-  if (!res.ok) return []
-  return res.json()
+  const places = await apiSearchPlaces(query, "en")
+  return places.map((p, i) => ({
+    place_id: i,
+    display_name: [p.label, p.secondary].filter(Boolean).join(", "),
+    lat: String(p.lat),
+    lon: String(p.lon),
+  }))
 }
 
 async function reverseGeocode(lat: number, lng: number): Promise<string> {
-  const params = new URLSearchParams({
-    lat: String(lat),
-    lon: String(lng),
-    format: "json",
-  })
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?${params}`,
-      { headers: { "Accept-Language": "en" } }
-    )
-    if (!res.ok) return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
-    const data = await res.json()
-    return data.display_name ?? `${lat.toFixed(4)}, ${lng.toFixed(4)}`
-  } catch {
-    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
-  }
+  const p = await reversePlace(lat, lng, "en")
+  return [p.label, p.secondary].filter(Boolean).join(", ")
 }
 
 // Shorten a long Nominatim display_name to "Name, City, Region"
@@ -186,18 +169,11 @@ function NavigateMap() {
       setDestination(dest)
       setDestLabel(name)
 
-      // Fetch a rough route via OSRM (free, no API key)
+      // Route through the platform's own OSRM server (API /routes/preview)
       if (userLocation) {
         try {
-          const url = `https://router.project-osrm.org/route/v1/driving/${userLocation.lng},${userLocation.lat};${lng},${lat}?overview=full&geometries=geojson`
-          const res = await fetch(url)
-          if (res.ok) {
-            const data = await res.json()
-            const coords: [number, number][] =
-              data.routes?.[0]?.geometry?.coordinates ?? []
-            // OSRM returns [lng, lat] — flip to LatLng
-            setRoutePoints(coords.map(([lo, la]) => ({ lat: la, lng: lo })))
-          }
+          const [route] = await fetchRoutePreview([userLocation.lat, userLocation.lng], [lat, lng], false)
+          setRoutePoints(route.geometry.map(([la, lo]) => ({ lat: la, lng: lo })))
         } catch {
           setRoutePoints([])
         }

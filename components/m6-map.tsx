@@ -205,7 +205,7 @@ export function M6Map(props: M6MapProps) {
 
   return (
     <>
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+      <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
       <div className={cn("relative isolate overflow-hidden rounded-lg border", className)}>
         <div ref={boxRef} className="h-full w-full" />
         {(tiles.fallbackReason === "google_not_configured" || tiles.fallbackReason === "google_unavailable") && (

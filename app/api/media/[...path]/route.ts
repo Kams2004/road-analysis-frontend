@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 
 const MINIO_BASE = (process.env.MINIO_URL || "http://localhost:9200").replace(/\/$/, "")
+// Only the buckets whose images the console displays; datasets / reports stay private
+// (served by the API with a session), and no path may climb out of its bucket.
+const PUBLIC_BUCKETS = new Set(["detections", "signalements"])
+const SAFE_SEGMENT = /^[A-Za-z0-9._@=+-][A-Za-z0-9._@=+ -]*$/
 
 const MIME: Record<string, string> = {
   mp4: "video/mp4", webm: "video/webm", avi: "video/x-msvideo",
@@ -10,8 +14,11 @@ const MIME: Record<string, string> = {
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params
-  const filePath = path.join("/")
-  const ext = filePath.split(".").pop()?.toLowerCase() ?? ""
+  if (path.length < 2 || !PUBLIC_BUCKETS.has(path[0]) || path.some((p) => p === "." || p === ".." || !SAFE_SEGMENT.test(p))) {
+    return new NextResponse(null, { status: 404 })
+  }
+  const filePath = path.map(encodeURIComponent).join("/")
+  const ext = path[path.length - 1].split(".").pop()?.toLowerCase() ?? ""
   const url = `${MINIO_BASE}/${filePath}`
 
   const fetchHeaders: HeadersInit = {}

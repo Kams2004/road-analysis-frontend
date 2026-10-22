@@ -35,11 +35,35 @@ async function relay(res: Response): Promise<NextResponse> {
 }
 
 function unreachable(e: unknown) {
-  return NextResponse.json({ error: String(e) }, { status: 502 })
+  console.error("API proxy: backend unreachable", e)
+  return NextResponse.json({ detail: { code: "api_unreachable", message: "The API is not reachable." } }, { status: 502 })
+}
+
+/** Refuses what the proxy must never forward: path segments climbing out of the API
+ *  (`..`), and state-changing calls sent by another site (CSRF — a browser always sends
+ *  `Origin` on those; same-origin calls from the console match the Host). */
+function rejected(req: NextRequest, path: string[], write: boolean): NextResponse | null {
+  if (path.some((p) => p === "." || p === ".." || p.includes("\\"))) {
+    return NextResponse.json({ detail: { code: "not_found", message: "Not found." } }, { status: 404 })
+  }
+  if (write) {
+    const origin = req.headers.get("origin")
+    const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host")
+    let ok = true
+    if (origin) {
+      try { ok = new URL(origin).host === host } catch { ok = false }
+    }
+    if (!ok) {
+      return NextResponse.json({ detail: { code: "forbidden_origin", message: "Cross-site request refused." } }, { status: 403 })
+    }
+  }
+  return null
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params
+  const bad = rejected(req, path, false)
+  if (bad) return bad
   try {
     const res = await fetch(apiUrl(path, req.nextUrl.search), { cache: "no-store", headers: backendHeaders(req) })
     return relay(res)
@@ -50,6 +74,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params
+  const bad = rejected(req, path, true)
+  if (bad) return bad
   const contentType = req.headers.get("content-type") ?? ""
   const isMultipart = contentType.includes("multipart/form-data")
   try {
@@ -66,6 +92,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pat
 }
 
 async function withJsonBody(method: string, req: NextRequest, path: string[]) {
+  const bad = rejected(req, path, true)
+  if (bad) return bad
   try {
     const res = await fetch(apiUrl(path, req.nextUrl.search), {
       method,
@@ -88,6 +116,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ path
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params
+  const bad = rejected(req, path, true)
+  if (bad) return bad
   try {
     const res = await fetch(apiUrl(path, req.nextUrl.search), { method: "DELETE", headers: backendHeaders(req) })
     return relay(res)
