@@ -28,8 +28,8 @@ export const AVAILABLE_MODELS: DetectionModel[] = [
   },
   {
     id: "traffic_lights",
-    name: "Traffic Lights",
-    description: "Detect traffic lights and signal states",
+    name: "Traffic Signs",
+    description: "Detect road signs (stop, speed limits…) and traffic lights",
     icon: <AlertTriangle className="h-4 w-4" />,
     color: "bg-warning/10 text-warning border-warning/30 hover:bg-warning/20",
   },
