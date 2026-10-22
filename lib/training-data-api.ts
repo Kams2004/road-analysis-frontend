@@ -62,3 +62,53 @@ export async function downloadTrainingExport(type: string) {
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+
+// ── Box review in the server's Label Studio (api docs/TRAINING-DATA.md) ─────
+
+export interface LabelStudioProject {
+  detection_type: string
+  project_id: number
+  url: string
+  tasks: number
+  annotated: number
+  skipped: number
+  applied: number
+}
+
+export interface LabelStudioStatus {
+  configured: boolean
+  reachable: boolean
+  public_url: string | null
+  error: string | null
+  projects: LabelStudioProject[]
+}
+
+export interface LabelStudioSendResult {
+  detection_type: string
+  project_id: number
+  project_url: string
+  sent: number
+  renewed: number
+  already_there: number
+  not_ready: number
+}
+
+export interface LabelStudioFetchResult {
+  detection_type: string
+  project_id: number
+  applied: number
+  unchanged: number
+  skipped: number
+  missing: number
+  errors: string[]
+}
+
+export const getLabelStudioStatus = () => request<LabelStudioStatus>(`${P}/labelstudio/status`)
+
+/** One task per frame still to review (the frame's boxes as pre-annotations); re-run adds only new frames. */
+export const sendToLabelStudio = (type: string) =>
+  request<LabelStudioSendResult>(`${P}/labelstudio/${encodeURIComponent(type)}/send`, { method: "POST" })
+
+/** Writes the boxes submitted in Label Studio back to their frames (box_reviewed). */
+export const fetchFromLabelStudio = (type: string) =>
+  request<LabelStudioFetchResult>(`${P}/labelstudio/${encodeURIComponent(type)}/fetch`, { method: "POST" })
