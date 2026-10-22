@@ -134,7 +134,7 @@ function EvidenceBody({ id, siblings, onNavigate, onOpenCluster }: {
             <div className="flex items-center gap-3 rounded-lg border p-2">
               <LightboxTrigger item={{ src: resolveMinioUrl(d.crop_url), title: t("ht.ev.crop") }} className="rounded">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={resolveMinioUrl(d.crop_url) ?? ""} alt="" className="h-16 w-16 rounded object-cover" />
+                <img src={resolveMinioUrl(d.crop_url) ?? ""} alt="" className="h-16 w-16 rounded bg-black object-contain" />
               </LightboxTrigger>
               <p className="text-xs text-muted-foreground">{t("ht.ev.crop")}</p>
             </div>

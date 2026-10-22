@@ -152,6 +152,30 @@ export default function SignalementsPage() {
   // counts
   const [counts, setCounts] = useState({ actif: 0, annule: 0, rejete: 0 })
 
+  // Deep link ?report=<id> (PDF reports, notifications): open that report's detail.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("report")
+    if (!id) return
+    fetch(`/api/proxy/signalements/${encodeURIComponent(id)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s: ApiSignalement | null) => {
+        if (!s) return
+        setSelected(s)
+        setHighlight(s.id)
+        setFocus((f) => ({ id: s.id, n: (f?.n ?? 0) + 1 }))
+      })
+      .catch(() => {})
+  }, [])
+  const closeDetail = () => {
+    setSelected(null)
+    const p = new URLSearchParams(window.location.search)
+    if (p.has("report")) {
+      p.delete("report")
+      const q = p.toString()
+      window.history.replaceState(null, "", q ? `${window.location.pathname}?${q}` : window.location.pathname)
+    }
+  }
+
   // ── Load counts once / after mutations ─────────────────────────────────────
   async function loadCounts() {
     const [a, b, c] = await Promise.all([
@@ -451,8 +475,8 @@ export default function SignalementsPage() {
                     <TableCell className="py-1.5 pl-4">
                       {img ? (
                         <LightboxTrigger item={{ src: img, title: typeLabel(s.type) }} className="rounded">
-                          <div className="relative h-7 w-10 overflow-hidden rounded bg-muted">
-                            <Image src={img} alt="" fill className="object-cover" unoptimized />
+                          <div className="relative h-7 w-10 overflow-hidden rounded bg-black">
+                            <Image src={img} alt="" fill className="object-contain" unoptimized />
                           </div>
                         </LightboxTrigger>
                       ) : (
@@ -558,7 +582,7 @@ export default function SignalementsPage() {
       </main>
 
       {/* ── Detail / Moderation Modal ── */}
-      <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>
+      <Dialog open={!!selected} onOpenChange={(o) => { if (!o) closeDetail() }}>
         <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
           {selected && (
             <>
@@ -579,12 +603,12 @@ export default function SignalementsPage() {
                 {/* Image */}
                 {resolveMinioUrl(selected.image_url) ? (
                   <LightboxTrigger item={{ src: resolveMinioUrl(selected.image_url), title: typeLabel(selected.type) }} className="w-full rounded-lg">
-                    <div className="relative aspect-video rounded-lg overflow-hidden bg-muted">
+                    <div className="relative aspect-video rounded-lg overflow-hidden bg-black">
                       <Image
                         src={resolveMinioUrl(selected.image_url)!}
                         alt="signalement"
                         fill
-                        className="object-cover"
+                        className="object-contain"
                         unoptimized
                       />
                     </div>

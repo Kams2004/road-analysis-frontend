@@ -273,7 +273,7 @@ function MemberRow({ m, index, cluster, selected, onOpen }: {
         <div className="relative h-16 w-20 shrink-0 overflow-hidden rounded-md bg-muted">
           {src
             // eslint-disable-next-line @next/next/no-img-element
-            ? <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
+            ? <img src={src} alt="" loading="lazy" className="h-full w-full bg-black object-contain" />
             : <div className="flex h-full items-center justify-center"><ImageIcon className="h-4 w-4 text-muted-foreground/60" /></div>}
           <span className="absolute left-1 top-1 rounded bg-slate-900/80 px-1 text-[10px] font-semibold text-white">#{index + 1}</span>
         </div>

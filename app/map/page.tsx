@@ -542,7 +542,7 @@ function Thumb({ d, onOpen, className }: { d: ApiDetection; onOpen: (d: ApiDetec
       title={t("pmap.map.openImage")} aria-label={t("pmap.map.openImage")}
       className={cn("group relative shrink-0 overflow-hidden rounded-md bg-muted ring-1 ring-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", className)}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="" loading="lazy" className="h-full w-full object-cover transition group-hover:scale-105" />
+      <img src={src} alt="" loading="lazy" className="h-full w-full bg-black object-contain" />
       <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition group-hover:bg-black/35 group-hover:opacity-100">
         <ZoomIn className="h-4 w-4" />
       </span>
@@ -835,7 +835,7 @@ function DetectionDetailPanel({ detection: d, number, onOpenImage, onClose }: {
               title={t("pmap.map.openImage")} aria-label={t("pmap.map.openImage")}
               className="group relative block aspect-video w-full overflow-hidden rounded-lg bg-muted disabled:cursor-default">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={(frame ?? crop)!} alt="" className="h-full w-full object-cover" />
+              <img src={(frame ?? crop)!} alt="" className="h-full w-full bg-black object-contain" />
               {canOpen && (
                 <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition group-hover:bg-black/35 group-hover:opacity-100">
                   <ZoomIn className="h-6 w-6" />
@@ -853,7 +853,7 @@ function DetectionDetailPanel({ detection: d, number, onOpenImage, onClose }: {
               <button type="button" disabled={!canOpen} onClick={() => onOpenImage(d)} title={t("pmap.map.openImage")}
                 className="relative h-16 w-20 shrink-0 overflow-hidden rounded bg-muted">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={crop} alt="" className="h-full w-full object-cover" />
+                <img src={crop} alt="" className="h-full w-full bg-black object-contain" />
               </button>
             )}
             <div className="text-xs space-y-1">

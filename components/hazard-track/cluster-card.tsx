@@ -8,6 +8,7 @@
 import { forwardRef } from "react"
 import { Clock, ImageIcon, Layers } from "lucide-react"
 import { resolveMinioUrl } from "@/lib/api"
+import { openLightbox } from "@/components/image-lightbox"
 import { cn } from "@/lib/utils"
 import type { Hazard } from "@/lib/module6-api"
 import { ExpiresText, RecurringBadge, ResolutionSourceBadge, useHzlLabels } from "@/components/hazard-lifecycle"
@@ -50,8 +51,16 @@ export const ClusterCard = forwardRef<HTMLButtonElement, {
       {/* Thumbnail of the best evidence */}
       <div className="relative h-[72px] w-[88px] shrink-0 overflow-hidden rounded-lg bg-muted">
         {cover
-          // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={cover} alt="" loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+          ? (
+            <span role="button" tabIndex={0} title={t("pmap.map.openImage")} aria-label={t("pmap.map.openImage")}
+              className="block h-full w-full cursor-zoom-in"
+              onClick={(e) => { e.stopPropagation(); openLightbox(lightboxItems(h, cover)) }}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); openLightbox(lightboxItems(h, cover)) } }}>
+              {/* Full image, letterboxed — never cropped */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={cover} alt="" loading="lazy" className="h-full w-full bg-black object-contain" />
+            </span>
+          )
           : <div className="flex h-full items-center justify-center"><ImageIcon className="h-5 w-5 text-muted-foreground/60" /></div>}
         <span className="absolute bottom-1 left-1"><TypeTile type={h.type} size="sm" className="bg-background/90 shadow-sm" /></span>
       </div>
@@ -115,3 +124,12 @@ export const ClusterCard = forwardRef<HTMLButtonElement, {
     </button>
   )
 })
+
+
+/** Full annotated frame first (when known), then the clean crop. */
+function lightboxItems(h: Hazard, cover: string) {
+  const frame = resolveMinioUrl(h.cover_image_url ?? null)
+  const crop = resolveMinioUrl(h.cover_crop_url ?? null)
+  const items = [frame, crop].filter((x): x is string => !!x).map((src) => ({ src, title: h.code }))
+  return items.length ? items : [{ src: cover, title: h.code }]
+}

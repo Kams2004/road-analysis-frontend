@@ -111,7 +111,7 @@ export function Thumb({ url, className }: { url: string | null; className?: stri
       onClick={(e) => { e.stopPropagation(); lightbox.open({ src }) }}
       className={cn("relative block h-12 w-16 cursor-zoom-in overflow-hidden rounded bg-muted ring-primary/50 hover:ring-2", className)}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" />
+      <img src={src} alt="" className="h-full w-full bg-black object-contain" loading="lazy" />
     </button>
   )
 }
