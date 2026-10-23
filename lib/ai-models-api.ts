@@ -43,6 +43,8 @@ export interface AiValidationSettings {
   pothole_max_area_ratio?: number
   /** Potholes: box touching the left/right border (1 %) and wider than 25 % → auto-reject `ai_box_too_large` (default true). */
   pothole_reject_edge_touching?: boolean
+  /** Large box but crop classifier ≥ this → review instead of rejected (1 = always reject). */
+  pothole_large_box_review_score?: number
   /** Ignore pothole / sign / bump boxes lying on the dashcam's text overlay (default on). */
   ignore_osd_text_boxes?: boolean
 }
@@ -56,6 +58,7 @@ export const POTHOLE_RULE_DEFAULTS = {
   pothole_max_width_ratio: 0.4,
   pothole_max_area_ratio: 0.12,
   pothole_reject_edge_touching: true,
+  pothole_large_box_review_score: 0.8,
 }
 
 export interface ModelCard {

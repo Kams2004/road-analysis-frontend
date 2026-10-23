@@ -62,7 +62,7 @@ interface Draft {
   skip: number | null
   potholeY: number | null
   /** Pothole false-positive rules (ai_validation.pothole_*). */
-  pr: { offRoad: PotholeOffRoadAction; maxW: number | null; maxA: number | null; edge: boolean }
+  pr: { offRoad: PotholeOffRoadAction; maxW: number | null; maxA: number | null; edge: boolean; largeReview: number | null }
 }
 
 function toDraft(l: Loaded, type: string): Draft {
@@ -81,6 +81,7 @@ function toDraft(l: Loaded, type: string): Draft {
       maxW: l.ai.pothole_max_width_ratio ?? POTHOLE_RULE_DEFAULTS.pothole_max_width_ratio,
       maxA: l.ai.pothole_max_area_ratio ?? POTHOLE_RULE_DEFAULTS.pothole_max_area_ratio,
       edge: l.ai.pothole_reject_edge_touching ?? POTHOLE_RULE_DEFAULTS.pothole_reject_edge_touching,
+      largeReview: l.ai.pothole_large_box_review_score ?? POTHOLE_RULE_DEFAULTS.pothole_large_box_review_score,
     },
   }
 }
@@ -139,6 +140,7 @@ export function CategorySettings({ type, readOnly, hasSubtypes = true }: { type:
     if (type === "pothole") {
       chk("pr.maxW", draft.pr.maxW, SHARE)
       chk("pr.maxA", draft.pr.maxA, SHARE)
+      chk("pr.largeReview", draft.pr.largeReview, SHARE)
     }
     if (draft.th.auto_accept != null && draft.th.auto_reject != null && draft.th.auto_accept <= draft.th.auto_reject) local["th.auto_accept"] = t("ai.set.err.order")
     if (draft.th.detector_accept != null && draft.th.detector_reject != null && draft.th.detector_accept <= draft.th.detector_reject) local["th.detector_accept"] = t("ai.set.err.order")
@@ -162,6 +164,7 @@ export function CategorySettings({ type, readOnly, hasSubtypes = true }: { type:
           if (draft.pr.maxW != null) body.pothole_max_width_ratio = draft.pr.maxW
           if (draft.pr.maxA != null) body.pothole_max_area_ratio = draft.pr.maxA
           body.pothole_reject_edge_touching = draft.pr.edge
+          if (draft.pr.largeReview != null) body.pothole_large_box_review_score = draft.pr.largeReview
         }
         await saveSettingsSection("ai_validation", body)
       }
@@ -310,6 +313,9 @@ export function CategorySettings({ type, readOnly, hasSubtypes = true }: { type:
               <NumField id="cat-pothole-maxa" label={t("ai.set.potholeMaxArea")} help={t("ai.set.potholeMaxAreaHint")}
                 value={draft.pr.maxA} def={POTHOLE_RULE_DEFAULTS.pothole_max_area_ratio} spec={SHARE} step={0.01} readOnly={readOnly}
                 error={errOf("pr.maxA", "pothole_max_area_ratio")} onChange={(v) => patch({ pr: { ...draft.pr, maxA: v } })} />
+              <NumField id="cat-pothole-large-review" label={t("ai.set.potholeLargeReview")} help={t("ai.set.potholeLargeReviewHint")}
+                value={draft.pr.largeReview} def={POTHOLE_RULE_DEFAULTS.pothole_large_box_review_score} spec={SHARE} step={0.05} readOnly={readOnly}
+                error={errOf("pr.largeReview", "pothole_large_box_review_score")} onChange={(v) => patch({ pr: { ...draft.pr, largeReview: v } })} />
             </div>
             <SwitchRow id="cat-pothole-edge" label={t("ai.set.potholeEdge")} help={t("ai.set.potholeEdgeHint")}
               checked={draft.pr.edge} def={POTHOLE_RULE_DEFAULTS.pothole_reject_edge_touching} readOnly={readOnly}
