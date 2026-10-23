@@ -191,11 +191,38 @@ export interface RejectionReason {
   created_at: string
 }
 
+// Rejection reasons change rarely: one request per detection type for a few minutes, shared by every
+// detection reviewed meanwhile (the Validations panel is rebuilt for each one). Adding or editing a
+// reason clears the cache.
+const REASONS_TTL_MS = 5 * 60 * 1000
+interface ReasonsEntry { at: number; data: Promise<RejectionReason[]>; resolved?: RejectionReason[] }
+const reasonsCache = new Map<string, ReasonsEntry>()
+
+/** Reasons already loaded for this type (null: not yet / expired). */
+export function cachedRejectionReasons(detection_type?: string): RejectionReason[] | null {
+  const hit = reasonsCache.get(detection_type ?? "*")
+  return hit && Date.now() - hit.at < REASONS_TTL_MS ? hit.resolved ?? null : null
+}
+
+export function clearRejectionReasonsCache() {
+  reasonsCache.clear()
+}
+
 export async function fetchRejectionReasons(detection_type?: string): Promise<RejectionReason[]> {
+  const key = detection_type ?? "*"
+  const hit = reasonsCache.get(key)
+  if (hit && Date.now() - hit.at < REASONS_TTL_MS) return hit.data
   const q = detection_type ? `?detection_type=${detection_type}` : ""
-  const res = await fetch(`${API_BASE}/rejection-reasons/${q}`, { cache: "no-store" })
-  if (!res.ok) throw new Error("Failed to fetch rejection reasons")
-  return res.json()
+  const entry: ReasonsEntry = {
+    at: Date.now(),
+    data: fetch(`${API_BASE}/rejection-reasons${q}`, { cache: "no-store" }).then((res) => {
+      if (!res.ok) throw new Error("Failed to fetch rejection reasons")
+      return res.json() as Promise<RejectionReason[]>
+    }),
+  }
+  entry.data.then((r) => { entry.resolved = r }).catch(() => reasonsCache.delete(key))
+  reasonsCache.set(key, entry)
+  return entry.data
 }
 
 export interface RejectionReasonPage { total: number; items: RejectionReason[] }
@@ -222,7 +249,7 @@ export async function fetchRejectionReasonTypes(): Promise<{ detection_type: str
 export async function createRejectionReason(body: {
   detection_type: string; code: string; label: string; description: string; kind?: RejectionKind
 }): Promise<RejectionReason> {
-  const res = await fetch(`${API_BASE}/rejection-reasons/`, {
+  const res = await fetch(`${API_BASE}/rejection-reasons`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -231,6 +258,7 @@ export async function createRejectionReason(body: {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.detail || "Failed to create reason")
   }
+  clearRejectionReasonsCache()
   return res.json()
 }
 
@@ -247,6 +275,7 @@ export async function updateRejectionReason(id: string, body: {
     const err = await res.json().catch(() => ({}))
     throw new Error(typeof err.detail === "string" ? err.detail : "Failed to update reason")
   }
+  clearRejectionReasonsCache()
   return res.json()
 }
 

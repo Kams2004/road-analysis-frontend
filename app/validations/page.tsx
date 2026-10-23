@@ -41,7 +41,7 @@ import { TablePagination } from "@/components/table-pagination"
 import { cn } from "@/lib/utils"
 import { errorText } from "@/lib/auth-api"
 import {
-  createRejectionReason, fetchRejectionReasons, resolveMinioUrl, REJECTION_KINDS, type RejectionKind, type RejectionReason,
+  cachedRejectionReasons, createRejectionReason, fetchRejectionReasons, resolveMinioUrl, REJECTION_KINDS, type RejectionKind, type RejectionReason,
 } from "@/lib/api"
 import {
   DETECTION_TYPES, FINAL_STATUSES, SUBTYPES,
@@ -526,7 +526,8 @@ function DetectionPanel({ item, initialMode, reasonLabel, onDecided, onChanged, 
   const [severity, setSeverity] = useState<string>("none")
   const [newType, setNewType] = useState(item.type)
   const [newSubtype, setNewSubtype] = useState<string>(item.subtype ?? "none")
-  const [reasons, setReasons] = useState<RejectionReason[] | null>(null)
+  // From the shared cache (lib/api) when the type was already loaded: no wait, no request.
+  const [reasons, setReasons] = useState<RejectionReason[] | null>(() => cachedRejectionReasons(item.type))
   const [reasonCode, setReasonCode] = useState("")
   const [reopenReason, setReopenReason] = useState("")
   const [addingReason, setAddingReason] = useState(false)
@@ -540,10 +541,10 @@ function DetectionPanel({ item, initialMode, reasonLabel, onDecided, onChanged, 
   useEffect(load, [load])
 
   const type = d?.type ?? item.type
-  useEffect(() => {
-    if (mode !== "reject" || reasons) return
+  useEffect(() => {          // loaded when the detection opens (once per type, then from the cache)
+    if (reasons) return
     fetchRejectionReasons(type).then(setReasons).catch(() => setReasons([]))
-  }, [mode, type, reasons])
+  }, [type, reasons])
 
   const cur = d ?? ({ ...item, history: [], hazard: null } as DetectionDetail)
   const status = cur.review_status
