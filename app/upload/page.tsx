@@ -32,7 +32,8 @@ import { cn } from "@/lib/utils"
 import { subtypeText, useI18n, useT } from "@/lib/i18n"
 import { useAuth } from "@/components/auth-provider"
 import { RequirePermission } from "@/components/require-permission"
-import { asDuplicateVideo, getModule7Settings, jobSubmitUrl, parseDate, type DuplicateVideoDetail } from "@/lib/module7-api"
+import { asDuplicateVideo, getModule7Settings, parseDate, type DuplicateVideoDetail } from "@/lib/module7-api"
+import { UploadHttpError, abortUpload, completeUpload, uploadInChunks } from "@/lib/chunked-upload"
 
 /** 409 duplicate_video: the same video content was already processed (or is queued). */
 class DuplicateVideoError extends Error {
@@ -55,7 +56,7 @@ interface StagedFile {
   isImage: boolean
 }
 
-type JobStatus = "uploading" | "pending" | "processing" | "done" | "failed" | "cancelled"
+type JobStatus = "waiting" | "uploading" | "pending" | "processing" | "done" | "failed" | "cancelled"
 
 interface QueueItem {
   id: string
@@ -69,6 +70,8 @@ interface QueueItem {
   processedFrames: number
   detectionCount: number
   error?: string
+  /** network trouble: the current chunk is being sent again */
+  retrying?: boolean
 }
 
 interface LiveDetection extends ApiDetection {
@@ -151,40 +154,23 @@ export default function UploadPage() {
     e.preventDefault(); setIsDragging(false); stageFiles(e.dataTransfer.files)
   }, [stageFiles])
 
-  // ── XHR upload with real progress ────────────────────────────────────────
+  // ── chunked upload (lib/chunked-upload.ts): short requests, retried on network errors ──
 
-  const uploadWithProgress = (
-    file: File,
-    models: string[],
-    frameSkipOverride: number | null,
-    onProgress: (pct: number) => void,
-    force = false,
-  ): Promise<JobOut> =>
-    new Promise((resolve, reject) => {
-      const form = new FormData()
-      form.append("file", file)
-      const xhr = new XMLHttpRequest()
-      xhr.open("POST", jobSubmitUrl(models, frameSkipOverride, force))
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
-      }
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(JSON.parse(xhr.responseText))
-        } else {
-          try {
-            const detail = JSON.parse(xhr.responseText).detail
-            const dup = xhr.status === 409 ? asDuplicateVideo(detail) : null
-            if (dup) { reject(new DuplicateVideoError(dup)); return }
-            const msg = typeof detail === "string" ? detail : detail?.message ?? (Array.isArray(detail) ? detail.map((d: { msg?: string }) => d.msg).join("; ") : "")
-            reject(new Error(msg || `HTTP ${xhr.status}`))
-          }
-          catch { reject(new Error(`HTTP ${xhr.status}`)) }
-        }
-      }
-      xhr.onerror = () => reject(new Error(t("ops.upload.networkError")))
-      xhr.send(form)
-    })
+  const uploadFile = async (qId: string, file: File): Promise<string> =>
+    uploadInChunks(file,
+      (pct) => setQueue((prev) => prev.map((q) => q.id === qId ? { ...q, progress: pct, retrying: false } : q)),
+      () => setQueue((prev) => prev.map((q) => q.id === qId ? { ...q, retrying: true } : q)))
+
+  const createJob = async (uploadId: string, models: string[], frameSkipOverride: number | null,
+                           force: boolean): Promise<JobOut> => {
+    try {
+      return await completeUpload<JobOut>(uploadId, models, frameSkipOverride, force)
+    } catch (e) {
+      const dup = e instanceof UploadHttpError && e.status === 409 ? asDuplicateVideo(e.detail) : null
+      if (dup) throw new DuplicateVideoError(dup)
+      throw e
+    }
+  }
 
   // ── polling ───────────────────────────────────────────────────────────────
 
@@ -280,41 +266,44 @@ export default function UploadPage() {
     toSubmit.forEach((s) => URL.revokeObjectURL(s.previewUrl))
     setActiveTab("queue")
 
-    for (const s of toSubmit) {
-      const qId = `q-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-      const item: QueueItem = {
-        id: qId,
+    // Every file is listed at once ("waiting"), then uploaded one after the other.
+    const models = [...selectedModels]
+    const items = toSubmit.map((s) => ({
+      s,
+      item: {
+        id: `q-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         filename: s.file.name,
-        selectedModels: [...selectedModels],
-        status: "uploading",
+        selectedModels: models,
+        status: "waiting",
         progress: 0,
         totalFrames: 0,
         processedFrames: 0,
         detectionCount: 0,
-      }
-      setQueue((prev) => [...prev, item])
+      } as QueueItem,
+    }))
+    setQueue((prev) => [...prev, ...items.map((x) => x.item)])
 
+    for (const { s, item } of items) {
+      const qId = item.id
+      setQueue((prev) => prev.map((q) => q.id === qId ? { ...q, status: "uploading" } : q))
+      let uploadId: string | null = null
       try {
-        const backendModels = selectedModels.map((m) => MODEL_MAP[m] ?? m)
-        const send = (force: boolean) => uploadWithProgress(s.file, backendModels, skipOverride, (pct) => {
-          setQueue((prev) =>
-            prev.map((q) => q.id === qId ? { ...q, progress: pct } : q)
-          )
-        }, force)
+        const backendModels = models.map((m) => MODEL_MAP[m] ?? m)
+        uploadId = await uploadFile(qId, s.file)
         let job: JobOut
         try {
-          job = await send(false)
+          job = await createJob(uploadId, backendModels, skipOverride, false)
         } catch (e) {
           if (!(e instanceof DuplicateVideoError)) throw e
-          // Same video content already processed / queued: ask what to do.
+          // Same video content already processed / queued: ask what to do (the file stays on the server).
           const choice = await askDuplicate(e.detail, s.file.name)
           if (choice !== "force") {
+            void abortUpload(uploadId)
             setQueue((prev) => prev.filter((q) => q.id !== qId))
             if (choice === "open") router.push(jobHref(e.detail.job_id))
             continue
           }
-          setQueue((prev) => prev.map((q) => q.id === qId ? { ...q, progress: 0 } : q))
-          job = await send(true)
+          job = await createJob(uploadId, backendModels, skipOverride, true)
         }
         setQueue((prev) =>
           prev.map((q) =>
@@ -325,8 +314,11 @@ export default function UploadPage() {
         )
         startPolling(qId, job.id)
       } catch (e) {
+        if (uploadId) void abortUpload(uploadId)
+        const msg = e instanceof UploadHttpError && e.status === 0 ? t("ops.upload.networkError")
+          : e instanceof Error ? e.message : String(e)
         setQueue((prev) =>
-          prev.map((q) => q.id === qId ? { ...q, status: "failed", error: String(e) } : q)
+          prev.map((q) => q.id === qId ? { ...q, status: "failed", retrying: false, error: msg } : q)
         )
       }
     }
@@ -652,6 +644,7 @@ export default function UploadPage() {
 function StatusBadge({ status }: { status: JobStatus }) {
   const t = useT()
   const map: Record<JobStatus, { label: string; tone: BadgeTone }> = {
+    waiting:    { label: t("ops.upload.waiting"), tone: "slate" },
     uploading:  { label: t("ops.upload.uploading"), tone: "blue" },
     pending:    { label: t("ops.status.pending"), tone: "amber" },
     processing: { label: t("ops.status.processing"), tone: "blue" },
@@ -702,7 +695,9 @@ const QueueCard = memo(function QueueCard({ item }: { item: QueueItem }) {
               />
             </div>
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{t("ops.upload.uploadingDots")}</span>
+              <span className={item.retrying ? "text-warning" : undefined}>
+                {item.retrying ? t("ops.upload.retrying") : t("ops.upload.uploadingDots")}
+              </span>
               <span className="tabular-nums font-medium">{item.progress}%</span>
             </div>
           </div>
@@ -753,7 +748,7 @@ const QueueCard = memo(function QueueCard({ item }: { item: QueueItem }) {
       </div>
 
       <div className="mt-1.5 shrink-0">
-        {item.status === "uploading" || item.status === "pending" || item.status === "processing"
+        {item.status === "waiting" || item.status === "uploading" || item.status === "pending" || item.status === "processing"
           ? <Loader2 className="h-4 w-4 animate-spin text-primary" />
           : item.status === "done"
           ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />

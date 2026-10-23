@@ -78,11 +78,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pat
   if (bad) return bad
   const contentType = req.headers.get("content-type") ?? ""
   const isMultipart = contentType.includes("multipart/form-data")
+  // Upload chunks (application/octet-stream) are forwarded as raw bytes, never re-encoded as text.
+  const isBinary = contentType.includes("application/octet-stream")
   try {
     const res = await fetch(apiUrl(path, req.nextUrl.search), {
       method: "POST",
       headers: backendHeaders(req, { "Content-Type": contentType || "application/json" }),
-      body: isMultipart ? req.body : await req.text(),
+      body: isMultipart ? req.body : isBinary ? await req.arrayBuffer() : await req.text(),
       ...(isMultipart ? { duplex: "half" } : {}),
     } as RequestInit)
     return relay(res)
