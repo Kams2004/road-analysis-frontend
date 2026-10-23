@@ -6,7 +6,7 @@
  * pagination, and a side panel with the evidence, location, cluster preview,
  * history and the Accept / Correct / Reject / Reopen actions.
  */
-import { useCallback, useEffect, useId, useState } from "react"
+import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { toast } from "sonner"
 import {
   AlertTriangle, CheckCircle, Clock, Edit2, Eye, Layers, Loader2, MapPin, Plus, RotateCcw,
@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -104,6 +105,16 @@ export default function ValidationsPage() {
   const [reasons, setReasons] = useState<RejectionReason[]>([])
   const [selected, setSelected] = useState<M6Detection | null>(null)
   const [initialMode, setInitialMode] = useState<Mode>("idle")
+  // After a decision: open the next pending item (remembered per browser) and say so in the panel.
+  const [autoNext, setAutoNextState] = useState(true)
+  const [notice, setNotice] = useState<{ msg: string; remaining: number } | null>(null)
+  useEffect(() => {
+    try { setAutoNextState(localStorage.getItem(AUTO_NEXT_KEY) !== "0") } catch { /* storage blocked */ }
+  }, [])
+  const setAutoNext = (v: boolean) => {
+    setAutoNextState(v)
+    try { localStorage.setItem(AUTO_NEXT_KEY, v ? "1" : "0") } catch { /* storage blocked */ }
+  }
 
   const setF = (k: keyof Filters, v: string) => { setFilters((f) => ({ ...f, [k]: v })); setPage(1) }
   const refresh = useCallback(() => setReload((n) => n + 1), [])
@@ -157,12 +168,14 @@ export default function ValidationsPage() {
     return () => { alive = false }
   }, [tab, page, pageSize, sort, debounced, reload]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const open = (d: M6Detection, mode: Mode = "idle") => { setInitialMode(mode); setSelected(d) }
+  const open = (d: M6Detection, mode: Mode = "idle") => { setNotice(null); setInitialMode(mode); setSelected(d) }
 
-  /** After a decision: refresh and move on to the next item of the page. */
-  const afterDecision = (id: string) => {
+  /** After a decision: refresh, then either close the panel or move on to the next item of the
+   *  page — with a banner saying the decision was saved and this is another detection. */
+  const afterDecision = (id: string, msg: string) => {
     const idx = items.findIndex((x) => x.id === id)
-    const next = items.slice(idx + 1).find((x) => x.id !== id) ?? null
+    const next = autoNext ? (items.slice(idx + 1).find((x) => x.id !== id) ?? null) : null
+    setNotice(next ? { msg, remaining: Math.max(0, total - 1) } : null)
     setSelected(next)
     setInitialMode("idle")
     refresh()
@@ -446,7 +459,10 @@ export default function ValidationsPage() {
               item={selected}
               initialMode={initialMode}
               reasonLabel={reasonLabel}
-              onDecided={() => afterDecision(selected.id)}
+              onDecided={(msg) => afterDecision(selected.id, msg)}
+              notice={notice}
+              autoNext={autoNext}
+              onAutoNext={setAutoNext}
               onChanged={refresh}
               onReasonAdded={(r) => setReasons((xs) => [...xs, r])}
             />
@@ -475,11 +491,17 @@ function ClusterHintText({ d }: { d: M6Detection }) {
 
 type Mode = "idle" | "correct" | "reject" | "reopen" | "location"
 
-function DetectionPanel({ item, initialMode, reasonLabel, onDecided, onChanged, onReasonAdded }: {
+const AUTO_NEXT_KEY = "validations.autoNext"
+
+function DetectionPanel({ item, initialMode, reasonLabel, onDecided, onChanged, onReasonAdded, notice, autoNext,
+  onAutoNext }: {
   item: M6Detection
   initialMode: Mode
   reasonLabel: (code: string | null) => string
-  onDecided: () => void
+  onDecided: (msg: string) => void
+  notice: { msg: string; remaining: number } | null
+  autoNext: boolean
+  onAutoNext: (v: boolean) => void
   onChanged: () => void
   onReasonAdded: (r: RejectionReason) => void
 }) {
@@ -490,6 +512,10 @@ function DetectionPanel({ item, initialMode, reasonLabel, onDecided, onChanged, 
   const canReopen = can("validations", "delete")
   const canAddReason = can("validations", "add")
 
+  // A new detection (keyed remount) opens at the top: otherwise the panel keeps the scroll position
+  // of the previous one and looks unchanged after a decision.
+  const topRef = useRef<HTMLDivElement>(null)
+  useEffect(() => { topRef.current?.scrollIntoView({ block: "start" }) }, [])
   const [d, setD] = useState<DetectionDetail | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [mode, setMode] = useState<Mode>(initialMode)
@@ -529,7 +555,7 @@ function DetectionPanel({ item, initialMode, reasonLabel, onDecided, onChanged, 
     try {
       await fn()
       toast.success(msg)
-      if (decided) onDecided()
+      if (decided) onDecided(msg)
       else { load(); onChanged() }
     } catch (err) {
       toast.error(errorText(t, err, "m6"))
@@ -580,6 +606,20 @@ function DetectionPanel({ item, initialMode, reasonLabel, onDecided, onChanged, 
 
   return (
     <>
+      <div ref={topRef} />
+      {notice && (
+        <div role="status" className="flex items-start gap-2 border-b border-success/30 bg-success/10 px-4 py-2.5 text-sm sm:px-6">
+          <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+          <span>
+            <span className="font-medium">{notice.msg}.</span>{" "}
+            {t("m6.val.nextShown", { n: notice.remaining })}
+          </span>
+        </div>
+      )}
+      <div className="flex items-center justify-end gap-2 border-b px-4 py-1.5 text-xs text-muted-foreground sm:px-6">
+        <Label htmlFor="val-auto-next" className="cursor-pointer text-xs font-normal">{t("m6.val.autoNext")}</Label>
+        <Switch id="val-auto-next" checked={autoNext} onCheckedChange={onAutoNext} />
+      </div>
       <SheetHeader className="border-b p-4 sm:p-6">
         <SheetTitle className="flex flex-wrap items-center gap-2 pr-6">
           {L.typeLabel(cur.type)}
