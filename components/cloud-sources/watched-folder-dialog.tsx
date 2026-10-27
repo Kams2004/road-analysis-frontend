@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import { useT } from "@/lib/i18n"
 import { listCloudFolders, toBackendModels, toUiModels, type CloudFolder } from "@/lib/module7-api"
 import { updateAutoImport, type CloudConnection } from "@/lib/cloud-sources-api"
+import { OpenLinkButton } from "./open-link-dialog"
 
 const S = "cs"
 
@@ -131,6 +132,12 @@ export function WatchedFolderDialog({ connection, onClose, onSaved }: {
               )}
             </div>
             <div className="flex flex-wrap gap-2">
+              {connection?.provider === "onedrive" && (
+                <OpenLinkButton connectionId={connection.id} onOpened={(r) => {
+                  setTrail(r.breadcrumbs.map((c) => ({ id: c.id, name: c.name })))
+                  setPicked({ id: r.id, name: r.name })
+                }} />
+              )}
               <Button type="button" size="sm" variant="outline" disabled={!current}
                 onClick={() => current && setPicked({ id: current.id, name: current.name })}>
                 {current ? t(`${S}.useFolder`, { name: current.name }) : t(`${S}.openFolderFirst`)}

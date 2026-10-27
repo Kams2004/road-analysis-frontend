@@ -30,6 +30,7 @@ import {
 } from "@/lib/cloud-sources-api"
 import { ProviderIcon } from "./provider-icon"
 import { ImportDialog } from "./import-dialog"
+import { OpenLinkButton } from "./open-link-dialog"
 
 const S = "cs"
 type SortKey = "name" | "size" | "modified" | "type"
@@ -282,6 +283,9 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
               </span>
             ))}
           </nav>
+          {connection.provider === "onedrive" && (
+            <OpenLinkButton connectionId={connection.id} onOpened={(r) => { setQuery(""); setTrail(r.breadcrumbs) }} />
+          )}
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setReloadKey((k) => k + 1)} aria-label={t("ops.common.refresh")}>
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
           </Button>

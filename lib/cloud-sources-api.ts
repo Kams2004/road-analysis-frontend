@@ -265,3 +265,10 @@ export function formatSftpLogLine(l: SftpLogLine, locale?: string): string {
   })
   return `${time}  ${l.level === "error" ? "Error: " : "Status:"}  ${l.message}`
 }
+
+export interface ResolvedLink { id: string; name: string; kind: "folder" | "file"; breadcrumbs: Crumb[] }
+
+/** OneDrive: open a folder from its address (share link or the browser's address bar) — folders
+ *  shared through a link are listed neither under "Shared with me" nor under shortcuts. */
+export const resolveCloudLink = (connectionId: string, url: string) =>
+  request<ResolvedLink>(`${P}/cloud-connections/${connectionId}/resolve?url=${encodeURIComponent(url)}`)

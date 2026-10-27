@@ -63,6 +63,12 @@ export const en: Record<string, string> = {
   "cs.errorHint": "The last access to this drive failed. Reconnect it from its menu.",
 
   // watched folder
+  "cs.link.open": "Open a link…",
+  "cs.link.title": "Open a folder from its address",
+  "cs.link.desc": "For a folder shared with you through a link (it is not listed under \"Shared with me\"): paste its share link, or the address your browser shows when the folder is open in OneDrive.",
+  "cs.link.label": "OneDrive / SharePoint address",
+  "cs.link.go": "Open",
+  "cs.link.notFolder": "This address leads to a file: paste the address of its folder.",
   "cs.watchTitle": "Watched folder & auto-import",
   "cs.watchDesc": "New files dropped in this folder are imported automatically at every check (interval set in Settings).",
   "cs.root": "My drive",
@@ -330,6 +336,12 @@ export const fr: Record<string, string> = {
   "cs.disabledHint": "Cet espace est désactivé. Activez-le depuis son menu pour parcourir et importer.",
   "cs.errorHint": "Le dernier accès à cet espace a échoué. Reconnectez-le depuis son menu.",
 
+  "cs.link.open": "Ouvrir un lien…",
+  "cs.link.title": "Ouvrir un dossier depuis son adresse",
+  "cs.link.desc": "Pour un dossier partagé avec vous par un lien (il n'apparaît pas dans \"Partagé avec moi\") : collez son lien de partage, ou l'adresse affichée par votre navigateur quand le dossier est ouvert dans OneDrive.",
+  "cs.link.label": "Adresse OneDrive / SharePoint",
+  "cs.link.go": "Ouvrir",
+  "cs.link.notFolder": "Cette adresse mène à un fichier : collez l'adresse de son dossier.",
   "cs.watchTitle": "Dossier surveillé et import automatique",
   "cs.watchDesc": "Les nouveaux fichiers déposés dans ce dossier sont importés automatiquement à chaque vérification (intervalle défini dans les Paramètres).",
   "cs.root": "Mon espace",
@@ -592,6 +604,12 @@ export const es: Record<string, string> = {
   "cs.disabledHint": "Esta unidad está desactivada. Actívela desde su menú para explorar e importar.",
   "cs.errorHint": "El último acceso a esta unidad falló. Reconéctela desde su menú.",
 
+  "cs.link.open": "Abrir un enlace…",
+  "cs.link.title": "Abrir una carpeta desde su dirección",
+  "cs.link.desc": "Para una carpeta compartida con usted mediante un enlace (no aparece en \"Compartido conmigo\"): pegue su enlace, o la dirección que muestra el navegador cuando la carpeta está abierta en OneDrive.",
+  "cs.link.label": "Dirección de OneDrive / SharePoint",
+  "cs.link.go": "Abrir",
+  "cs.link.notFolder": "Esta dirección lleva a un archivo: pegue la dirección de su carpeta.",
   "cs.watchTitle": "Carpeta vigilada e importación automática",
   "cs.watchDesc": "Los archivos nuevos de esta carpeta se importan automáticamente en cada revisión (intervalo definido en Ajustes).",
   "cs.root": "Mi unidad",
