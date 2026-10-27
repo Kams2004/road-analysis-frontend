@@ -13,8 +13,8 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import {
-  AlertTriangle, Eye, FolderSync, KeyRound, Loader2, MoreHorizontal, Pencil, Plug, PlugZap, Plus, Power, RefreshCw,
-  ShieldOff, Trash2, Unplug,
+  AlertTriangle, ChevronDown, Eye, FolderSync, KeyRound, Loader2, MoreHorizontal, Pencil, Plug, PlugZap, Plus, Power,
+  RefreshCw, ShieldOff, Trash2, Unplug,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -181,7 +181,8 @@ export function ConnectionsPanel({ connections, providers, selectedId, onSelect,
                   onClick={() => onSelect(c)}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(c) } }}
                   className={cn(
-                    "group rounded-xl border bg-card p-3 text-left shadow-sm outline-none transition-all",
+                    "group rounded-xl border bg-card text-left shadow-sm outline-none transition-all",
+                    selected ? "p-3" : "px-3 py-2",
                     "hover:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/50",
                     selected ? "border-primary ring-1 ring-primary/40" : "border-border",
                   )}
@@ -192,12 +193,17 @@ export function ConnectionsPanel({ connections, providers, selectedId, onSelect,
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
+                        {!selected && (
+                          <span className={cn("h-2 w-2 shrink-0 rounded-full", dotTone(c, link))} aria-hidden />
+                        )}
                         <p className="truncate text-sm font-semibold">{c.name}</p>
                       </div>
                       <p className="truncate text-xs text-muted-foreground" title={c.account_email ?? undefined}>
                         {c.account_email || t(`m7.jobs.source.${c.provider}`)}
                       </p>
                     </div>
+                    <ChevronDown className={cn("mt-1.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform", selected && "rotate-180")}
+                      aria-hidden />
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={(e) => e.stopPropagation()}
@@ -262,105 +268,110 @@ export function ConnectionsPanel({ connections, providers, selectedId, onSelect,
                     </DropdownMenu>
                   </div>
 
-                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                    {isSftp && c.enabled ? (
-                      <SftpStateBadge state={link} title={c.sftp?.link_message ?? undefined} />
-                    ) : (
-                      <StatusBadge tone={c.enabled ? CONN_TONE[c.status] ?? "slate" : "slate"}>
-                        {c.enabled ? t(`${S}.status.${c.status}`) : t(`${S}.status.disabled`)}
-                      </StatusBadge>
-                    )}
-                    {c.auto_import && c.enabled && (
-                      <StatusBadge tone="blue" dot={false}>
-                        <FolderSync className="mr-1 h-3 w-3" />{t(`${S}.autoImportOn`)}
-                      </StatusBadge>
-                    )}
-                  </div>
+                  {/* Only the selected source is unfolded: the others stay one line. */}
+                  {selected && (
+                    <>
+                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                      {isSftp && c.enabled ? (
+                        <SftpStateBadge state={link} title={c.sftp?.link_message ?? undefined} />
+                      ) : (
+                        <StatusBadge tone={c.enabled ? CONN_TONE[c.status] ?? "slate" : "slate"}>
+                          {c.enabled ? t(`${S}.status.${c.status}`) : t(`${S}.status.disabled`)}
+                        </StatusBadge>
+                      )}
+                      {c.auto_import && c.enabled && (
+                        <StatusBadge tone="blue" dot={false}>
+                          <FolderSync className="mr-1 h-3 w-3" />{t(`${S}.autoImportOn`)}
+                        </StatusBadge>
+                      )}
+                    </div>
 
-                  {isSftp && c.sftp && (
-                    <dl className="mt-2.5 space-y-1 text-[11px]">
-                      <div className="flex min-w-0 gap-2">
-                        <dt className="shrink-0 text-muted-foreground">{t(`${S}.sftp.baseFolder`)}</dt>
-                        <dd className="min-w-0 truncate font-mono font-medium" title={c.sftp.base_path ?? undefined}>
-                          {c.sftp.base_path || t(`${S}.sftp.home`)}
+                    {isSftp && c.sftp && (
+                      <dl className="mt-2.5 space-y-1 text-[11px]">
+                        <div className="flex min-w-0 gap-2">
+                          <dt className="shrink-0 text-muted-foreground">{t(`${S}.sftp.baseFolder`)}</dt>
+                          <dd className="min-w-0 truncate font-mono font-medium" title={c.sftp.base_path ?? undefined}>
+                            {c.sftp.base_path || t(`${S}.sftp.home`)}
+                          </dd>
+                        </div>
+                        <div className="flex min-w-0 gap-2">
+                          <dt className="shrink-0 text-muted-foreground">{t(`${S}.sftp.password`)}</dt>
+                          <dd className={cn("min-w-0 truncate font-medium", !c.sftp.credentials && "text-amber-700 dark:text-amber-400")}
+                            title={!c.sftp.password_saved && c.sftp.password_var ? c.sftp.password_var : undefined}>
+                            {c.sftp.password_saved
+                              ? <><KeyRound className="mr-1 inline h-3 w-3" />{t(`${S}.sftp.passwordSaved`)}</>
+                              : c.sftp.credentials
+                                ? <><KeyRound className="mr-1 inline h-3 w-3" />{t(`${S}.sftp.passwordSet`, { method: c.sftp.credentials })}</>
+                                : t(`${S}.sftp.passwordMissing`)}
+                          </dd>
+                        </div>
+                        <div className="flex min-w-0 gap-2">
+                          <dt className="shrink-0 text-muted-foreground">{t(`${S}.sftp.hostKey`)}</dt>
+                          <dd className="min-w-0 truncate font-mono" title={c.sftp.host_key_fingerprint ?? undefined}>
+                            {c.sftp.host_key_fingerprint?.split(" ").pop() ?? t(`${S}.sftp.hostKeyNone`)}
+                          </dd>
+                        </div>
+                      </dl>
+                    )}
+
+                    {isSftp && c.enabled && (canAdd || canEdit) && (
+                      <div className="mt-2.5 flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <Button size="sm" variant={link === "connected" ? "outline" : "default"} className="h-7 gap-1 px-2 text-[11px]"
+                          onClick={() => sftpConnect(c)} disabled={busy[c.id]}>
+                          <PlugZap className="h-3.5 w-3.5" />{link === "connected" ? t(`${S}.sftp.reconnect`) : t(`${S}.sftp.connect`)}
+                        </Button>
+                        {link === "connected" && (
+                          <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11px]" onClick={() => sftpDisconnect(c)} disabled={busy[c.id]}>
+                            <Unplug className="h-3.5 w-3.5" />{t(`${S}.sftp.disconnect`)}
+                          </Button>
+                        )}
+                        {canEdit && (
+                          <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-[11px]" onClick={() => setEditSftp(c)}>
+                            <Pencil className="h-3.5 w-3.5" />{t(`${S}.sftp.edit`).replace("…", "")}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
+                    <dl className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                      <div className="min-w-0">
+                        <dt className="text-muted-foreground">{t(`${S}.watched`)}</dt>
+                        <dd className="truncate font-medium">{c.folder_name || (c.folder_id ? c.folder_id : t(`${S}.none`))}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">{t(`${S}.lastSync`)}</dt>
+                        <dd className={cn("font-medium", c.last_sync_status === "error" && "text-destructive")}>
+                          {c.auto_import || c.last_sync_at ? fmt(c.last_sync_at) : "—"}
                         </dd>
                       </div>
-                      <div className="flex min-w-0 gap-2">
-                        <dt className="shrink-0 text-muted-foreground">{t(`${S}.sftp.password`)}</dt>
-                        <dd className={cn("min-w-0 truncate font-medium", !c.sftp.credentials && "text-amber-700 dark:text-amber-400")}
-                          title={!c.sftp.password_saved && c.sftp.password_var ? c.sftp.password_var : undefined}>
-                          {c.sftp.password_saved
-                            ? <><KeyRound className="mr-1 inline h-3 w-3" />{t(`${S}.sftp.passwordSaved`)}</>
-                            : c.sftp.credentials
-                              ? <><KeyRound className="mr-1 inline h-3 w-3" />{t(`${S}.sftp.passwordSet`, { method: c.sftp.credentials })}</>
-                              : t(`${S}.sftp.passwordMissing`)}
-                        </dd>
-                      </div>
-                      <div className="flex min-w-0 gap-2">
-                        <dt className="shrink-0 text-muted-foreground">{t(`${S}.sftp.hostKey`)}</dt>
-                        <dd className="min-w-0 truncate font-mono" title={c.sftp.host_key_fingerprint ?? undefined}>
-                          {c.sftp.host_key_fingerprint?.split(" ").pop() ?? t(`${S}.sftp.hostKeyNone`)}
-                        </dd>
+                      <div>
+                        <dt className="text-muted-foreground">{t(`${S}.imported`)}</dt>
+                        <dd className="font-medium tabular-nums">{c.files_imported_total ?? 0}</dd>
                       </div>
                     </dl>
-                  )}
 
-                  {isSftp && c.enabled && (canAdd || canEdit) && (
-                    <div className="mt-2.5 flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
-                      <Button size="sm" variant={link === "connected" ? "outline" : "default"} className="h-7 gap-1 px-2 text-[11px]"
-                        onClick={() => sftpConnect(c)} disabled={busy[c.id]}>
-                        <PlugZap className="h-3.5 w-3.5" />{link === "connected" ? t(`${S}.sftp.reconnect`) : t(`${S}.sftp.connect`)}
-                      </Button>
-                      {link === "connected" && (
-                        <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11px]" onClick={() => sftpDisconnect(c)} disabled={busy[c.id]}>
-                          <Unplug className="h-3.5 w-3.5" />{t(`${S}.sftp.disconnect`)}
-                        </Button>
-                      )}
-                      {canEdit && (
-                        <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-[11px]" onClick={() => setEditSftp(c)}>
-                          <Pencil className="h-3.5 w-3.5" />{t(`${S}.sftp.edit`).replace("…", "")}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-
-                  <dl className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-                    <div className="min-w-0">
-                      <dt className="text-muted-foreground">{t(`${S}.watched`)}</dt>
-                      <dd className="truncate font-medium">{c.folder_name || (c.folder_id ? c.folder_id : t(`${S}.none`))}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">{t(`${S}.lastSync`)}</dt>
-                      <dd className={cn("font-medium", c.last_sync_status === "error" && "text-destructive")}>
-                        {c.auto_import || c.last_sync_at ? fmt(c.last_sync_at) : "—"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">{t(`${S}.imported`)}</dt>
-                      <dd className="font-medium tabular-nums">{c.files_imported_total ?? 0}</dd>
-                    </div>
-                  </dl>
-
-                  {c.status === "pending_auth" && (
-                    <div className="mt-2.5 flex items-center justify-between gap-2 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-400">
-                      <span>{t(`${S}.pendingAuth`)}</span>
-                      {canEdit && (
-                        <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]"
-                          onClick={(e) => { e.stopPropagation(); reconnect(c) }}>{t(`${S}.finish`)}</Button>
-                      )}
-                    </div>
-                  )}
-                  {isSftp && c.enabled && link === "error" && c.sftp?.link_message && (
-                    <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
-                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                      <span className="line-clamp-3 break-words">{c.sftp.link_message}</span>
-                    </div>
-                  )}
-                  {c.status === "error" && c.last_sync_error && !(isSftp && link === "error") && (
-                    <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
-                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                      <span className="line-clamp-3 break-words">{c.last_sync_error}</span>
-                    </div>
+                    {c.status === "pending_auth" && (
+                      <div className="mt-2.5 flex items-center justify-between gap-2 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-400">
+                        <span>{t(`${S}.pendingAuth`)}</span>
+                        {canEdit && (
+                          <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]"
+                            onClick={(e) => { e.stopPropagation(); reconnect(c) }}>{t(`${S}.finish`)}</Button>
+                        )}
+                      </div>
+                    )}
+                    {isSftp && c.enabled && link === "error" && c.sftp?.link_message && (
+                      <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span className="line-clamp-3 break-words">{c.sftp.link_message}</span>
+                      </div>
+                    )}
+                    {c.status === "error" && c.last_sync_error && !(isSftp && link === "error") && (
+                      <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span className="line-clamp-3 break-words">{c.last_sync_error}</span>
+                      </div>
+                    )}
+                    </>
                   )}
                 </div>
               </li>
@@ -412,6 +423,16 @@ export function ConnectionsPanel({ connections, providers, selectedId, onSelect,
       </AlertDialog>
     </div>
   )
+}
+
+/** Status dot of a folded card: green usable, amber waiting, red failing, grey off. */
+function dotTone(c: CloudConnection, link: SftpLinkState): string {
+  if (!c.enabled) return "bg-slate-400"
+  if (c.provider === "sftp") {
+    return link === "connected" ? "bg-emerald-500" : link === "error" ? "bg-red-500"
+      : link === "connecting" ? "bg-amber-500" : "bg-slate-400"
+  }
+  return c.status === "active" ? "bg-emerald-500" : c.status === "error" ? "bg-red-500" : "bg-amber-500"
 }
 
 function ConnectDialog({ open, onOpenChange, providers, onSftpCreated }: {
