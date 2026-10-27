@@ -326,6 +326,16 @@ export interface CloudConnection {
   authorized?: boolean
   /** SFTP server profile (provider "sftp") — the password is never returned. */
   sftp?: SftpInfo | null
+  /** Folders bookmarked in the browser (e.g. a OneDrive folder opened from its link). */
+  saved_folders?: SavedFolder[]
+}
+
+export interface SavedFolder {
+  id: string
+  name: string
+  breadcrumbs: { id: string; name: string }[]
+  /** Address it was opened from, if any. */
+  link?: string | null
 }
 
 export type SftpLinkState = "disconnected" | "connecting" | "connected" | "error"

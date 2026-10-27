@@ -6,12 +6,12 @@
  * Connection CRUD and the OAuth callback reuse lib/module7-api.ts.
  */
 import { request } from "@/lib/auth-api"
-import type { CloudConnection, SftpInfo, SftpLinkState } from "@/lib/module7-api"
+import type { CloudConnection, SavedFolder, SftpInfo, SftpLinkState } from "@/lib/module7-api"
 
 const P = "/api/proxy"
 const json = (body: unknown) => ({ body: JSON.stringify(body) })
 
-export type { CloudConnection, SftpInfo, SftpLinkState }
+export type { CloudConnection, SavedFolder, SftpInfo, SftpLinkState }
 
 export interface CloudProviderInfo {
   id: "google_drive" | "onedrive" | "sftp" | string
@@ -179,6 +179,10 @@ export const reauthorizeConnection = (id: string) =>
 
 export const updateAutoImport = (id: string, body: AutoImportPatch) =>
   request<CloudConnection>(`${P}/cloud-connections/${id}`, { method: "PATCH", ...json(body) })
+
+/** Replaces the whole list of saved folders of a connection ([] clears it). */
+export const saveFolders = (id: string, saved_folders: SavedFolder[]) =>
+  request<CloudConnection>(`${P}/cloud-connections/${id}`, { method: "PATCH", ...json({ saved_folders }) })
 
 // ── formatting ───────────────────────────────────────────────────────────────
 

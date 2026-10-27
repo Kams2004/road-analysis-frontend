@@ -33,6 +33,7 @@ import { TablePagination } from "@/components/table-pagination"
 import { ProviderIcon } from "./provider-icon"
 import { ImportDialog } from "./import-dialog"
 import { OpenLinkButton } from "./open-link-dialog"
+import { SavedFoldersMenu, rememberFolder, savedName } from "./saved-folders"
 
 const S = "cs"
 type SortKey = "name" | "size" | "modified" | "type"
@@ -55,11 +56,14 @@ function typeLabel(e: DriveEntry): string {
   return e.media ? `${e.media}:${ext}` : `other:${ext}`
 }
 
-export function FileBrowser({ connection, provider, canImport, onImported }: {
+export function FileBrowser({ connection, provider, canImport, canEdit = false, onImported, onConnectionChanged }: {
   connection: CloudConnection
   provider: CloudProviderInfo | null
   canImport: boolean
+  /** May change the connection (saved folders). */
+  canEdit?: boolean
   onImported: (b: ImportBatch) => void
+  onConnectionChanged?: (c: CloudConnection) => void
 }) {
   const { t, locale } = useI18n()
   const [trail, setTrail] = useState<Crumb[]>([])
@@ -313,8 +317,19 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
               </span>
             ))}
           </nav>
+          <SavedFoldersMenu connection={connection} trail={trail} canEdit={canEdit && !!onConnectionChanged}
+            onOpen={(f) => { setQuery(""); setTrail(f.breadcrumbs.length ? f.breadcrumbs : [{ id: f.id, name: f.name }]) }}
+            onChanged={(c) => onConnectionChanged?.(c)} />
           {connection.provider === "onedrive" && (
-            <OpenLinkButton connectionId={connection.id} onOpened={(r) => { setQuery(""); setTrail(r.breadcrumbs) }} />
+            <OpenLinkButton connectionId={connection.id} canRemember={canEdit && !!onConnectionChanged}
+              onOpened={(r, url, remember) => {
+                setQuery(""); setTrail(r.breadcrumbs)
+                if (remember && onConnectionChanged) {
+                  rememberFolder(connection, { id: r.id, name: savedName(r.breadcrumbs), breadcrumbs: r.breadcrumbs, link: url })
+                    .then(onConnectionChanged)
+                    .catch((e) => setError(errorText(t, e, S)))
+                }
+              }} />
           )}
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setReloadKey((k) => k + 1)} aria-label={t("ops.common.refresh")}>
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />

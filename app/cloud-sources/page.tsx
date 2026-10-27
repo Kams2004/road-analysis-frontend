@@ -188,7 +188,8 @@ function CloudSourcesInner() {
                 </div>
               ) : (
                 <>
-                  <FileBrowser connection={selected} provider={provider} canImport={canImport} onImported={onImported} />
+                  <FileBrowser connection={selected} provider={provider} canImport={canImport} canEdit={can("jobs", "edit")}
+                    onImported={onImported} onConnectionChanged={(c) => onChanged(c)} />
                   {isSftp && (
                     <SftpLogPanel connectionId={selected.id} canClear={can("jobs", "edit")}
                       onState={(st, msg) => onLinkState(selected.id, st, msg)} />

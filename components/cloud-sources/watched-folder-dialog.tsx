@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { ChevronRight, Folder, FolderSync, Home, Loader2 } from "lucide-react"
+import { Bookmark, ChevronRight, Folder, FolderSync, Home, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -131,6 +131,22 @@ export function WatchedFolderDialog({ connection, onClose, onSaved }: {
                 </ul>
               )}
             </div>
+            {!!connection?.saved_folders?.length && (
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <Bookmark className="h-3.5 w-3.5 text-muted-foreground" />
+                {connection.saved_folders.map((f) => (
+                  <button key={f.id} type="button" title={f.breadcrumbs.map((b) => b.name).join(" › ")}
+                    onClick={() => {
+                      setTrail(f.breadcrumbs.map((c) => ({ id: c.id, name: c.name })))
+                      setPicked({ id: f.id, name: f.breadcrumbs[f.breadcrumbs.length - 1]?.name ?? f.name })
+                    }}
+                    className={cn("max-w-[220px] truncate rounded-full border border-border px-2 py-0.5 hover:bg-muted",
+                      picked.id === f.id && "border-primary bg-primary/5 text-primary")}>
+                    {f.name}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
               {connection?.provider === "onedrive" && (
                 <OpenLinkButton connectionId={connection.id} onOpened={(r) => {

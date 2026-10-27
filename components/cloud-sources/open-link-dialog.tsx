@@ -7,6 +7,7 @@
 import { useState } from "react"
 import { Link2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -14,16 +15,19 @@ import { errorText } from "@/lib/auth-api"
 import { useT } from "@/lib/i18n"
 import { resolveCloudLink, type ResolvedLink } from "@/lib/cloud-sources-api"
 
-export function OpenLinkButton({ connectionId, onOpened, size = "sm" }: {
+export function OpenLinkButton({ connectionId, onOpened, size = "sm", canRemember = false }: {
   connectionId: string
-  onOpened: (r: ResolvedLink) => void
+  /** `url`: the address pasted; `remember`: "Keep it in Saved folders" was ticked. */
+  onOpened: (r: ResolvedLink, url: string, remember: boolean) => void
   size?: "sm" | "default"
+  canRemember?: boolean
 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
   const [url, setUrl] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [remember, setRemember] = useState(true)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -33,7 +37,7 @@ export function OpenLinkButton({ connectionId, onOpened, size = "sm" }: {
     try {
       const r = await resolveCloudLink(connectionId, url.trim())
       if (r.kind !== "folder") { setError(t("cs.link.notFolder")); return }
-      onOpened(r)
+      onOpened(r, url.trim(), canRemember && remember)
       setOpen(false)
       setUrl("")
     } catch (err) {
@@ -59,6 +63,12 @@ export function OpenLinkButton({ connectionId, onOpened, size = "sm" }: {
             <Input id="cs-link-url" autoFocus value={url} onChange={(e) => setUrl(e.target.value)}
               placeholder="https://…sharepoint.com/…" aria-invalid={!!error} />
             {error && <p className="text-xs text-destructive">{error}</p>}
+            {canRemember && (
+              <label className="flex items-center gap-2 pt-1 text-sm">
+                <Checkbox checked={remember} onCheckedChange={(v) => setRemember(v === true)} />
+                {t("cs.link.remember")}
+              </label>
+            )}
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={busy}>{t("common.cancel")}</Button>
               <Button type="submit" disabled={busy || !url.trim()}>
