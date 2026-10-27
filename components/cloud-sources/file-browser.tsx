@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import {
   ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, ChevronRight, ExternalLink, File as FileIcon, FileVideo, Folder,
-  ImageIcon, LayoutGrid, List, Loader2, RefreshCw, Search, X, CircleDashed, History,
+  Cpu, ImageIcon, LayoutGrid, List, Loader2, RefreshCw, Search, X, CircleDashed, History,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -599,13 +599,14 @@ function ImportedBadge({ e, compact = false }: { e: DriveEntry; compact?: boolea
   const conf = {
     imported: { icon: CheckCircle2, cls: "bg-emerald-500/12 text-emerald-700 ring-emerald-500/30 dark:text-emerald-400", label: t(`${S}.badge.imported`) },
     importing: { icon: CircleDashed, cls: "bg-blue-500/12 text-blue-700 ring-blue-500/30 dark:text-blue-400", label: t(`${S}.badge.importing`) },
+    processing: { icon: Cpu, cls: "bg-violet-500/12 text-violet-700 ring-violet-500/30 dark:text-violet-400", label: t(`${S}.badge.processing`) },
     changed: { icon: History, cls: "bg-amber-500/12 text-amber-700 ring-amber-500/30 dark:text-amber-400", label: t(`${S}.badge.changed`) },
   }[st]
   const Icon = conf.icon
   const badge = (
     <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset", conf.cls,
       compact && "bg-background/95")}>
-      <Icon className={cn("h-3 w-3", st === "importing" && "animate-spin [animation-duration:3s]")} />
+      <Icon className={cn("h-3 w-3", (st === "importing" || st === "processing") && "animate-spin [animation-duration:3s]")} />
       {!compact && conf.label}
     </span>
   )

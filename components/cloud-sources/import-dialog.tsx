@@ -55,7 +55,7 @@ export function ImportDialog({ open, onOpenChange, connection, files, folders, o
   const skipNum = Number(skip)
   const skipValid = !overrideSkip || (Number.isInteger(skipNum) && skipNum >= 1 && skipNum <= 60)
   const bytes = files.reduce((s, f) => s + (f.size ?? 0), 0)
-  const alreadyImported = files.filter((f) => f.imported?.state === "imported" || f.imported?.state === "importing").length
+  const alreadyImported = files.filter((f) => f.imported && ["imported", "importing", "processing"].includes(f.imported.state)).length
   const videos = files.filter((f) => f.media === "video").length
   const images = files.filter((f) => f.media === "image").length
 

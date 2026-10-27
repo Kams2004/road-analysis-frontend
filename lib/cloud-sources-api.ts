@@ -26,7 +26,7 @@ export interface CloudProviderInfo {
 }
 
 export interface ImportInfo {
-  state: "none" | "importing" | "imported" | "changed"
+  state: "none" | "importing" | "processing" | "imported" | "changed"
   job_id: string | null
   item_id: string | null
   batch_id: string | null
