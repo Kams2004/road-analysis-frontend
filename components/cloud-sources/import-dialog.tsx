@@ -86,7 +86,7 @@ export function ImportDialog({ open, onOpenChange, connection, files, folders, o
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ProviderIcon provider={connection.provider} />{t(`${S}.importTitle`)}
+            <ProviderIcon provider={connection.provider} />{t(`${S}.importTitle`, { name: connection.name })}
           </DialogTitle>
           <DialogDescription>{t(`${S}.importDesc`, { name: connection.name })}</DialogDescription>
         </DialogHeader>
