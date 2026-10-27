@@ -256,7 +256,9 @@ function CloudStorageCard({ data, onSaved, readOnly }: {
   const [saving, setSaving] = useState(false)
   const [redirect, setRedirect] = useState("")
 
-  useEffect(() => { setRedirect(cloudRedirectUri()) }, [])
+  // The server's value: it is what Google / Microsoft receive (it may differ from this page's
+  // address, e.g. http://localhost:3000 for a one-time SSH-tunnel sign-in without HTTPS).
+  useEffect(() => { setRedirect(data.redirect_uri || cloudRedirectUri()) }, [data.redirect_uri])
   useEffect(() => {
     setValues(Object.fromEntries(CLOUD_TEXT.map((k) => [k, data[k] == null ? "" : String(data[k])])))
   }, [data])

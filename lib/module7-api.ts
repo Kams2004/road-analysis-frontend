@@ -392,6 +392,8 @@ export interface CloudSettings {
   microsoft_client_secret_set?: boolean
   microsoft_tenant: string
   sync_interval_minutes: number
+  /** The OAuth redirect URI the server really sends to Google / Microsoft (register exactly this). */
+  redirect_uri?: string
   [k: string]: unknown
 }
 
@@ -422,7 +424,7 @@ export const saveProcessingSettings = (body: Partial<ProcessingSettings>) =>
 export const saveCloudSettings = (body: Record<string, unknown>) =>
   request<CloudSettings>(`${P}/platform-settings/cloud`, { method: "PUT", ...json(body) })
 
-/** Redirect URI to register with Google / Microsoft. */
+/** Fallback only (older server): the server's own `cloud.redirect_uri` is the address really used. */
 export const cloudRedirectUri = () =>
   typeof window === "undefined" ? "/settings/cloud/callback" : `${window.location.origin}/settings/cloud/callback`
 
