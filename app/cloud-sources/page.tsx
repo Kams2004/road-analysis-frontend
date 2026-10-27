@@ -5,8 +5,8 @@
  * live streams (Module 7, RRAP-07-002/004): connect Google Drive / OneDrive
  * accounts or SFTP servers, browse their folders, import a selection of
  * videos / images and follow every file from download to processed job. The
- * OAuth *client* credentials stay in Settings → Jobs; SFTP passwords in
- * infra/secrets/sftp.env; the connections live here. An SFTP server also shows
+ * OAuth *client* credentials stay in Settings → Jobs; SFTP passwords are typed
+ * here and stored encrypted by the API (never shown again); the connections live here. An SFTP server also shows
  * its FileZilla-style connection log under the browser.
  *
  * URL: ?connection=<id> selects a drive (the OAuth callback lands here),

@@ -335,9 +335,12 @@ export interface SftpInfo {
   port: number
   username: string
   base_path: string | null
-  password_key: string
-  /** Line to set in infra/secrets/sftp.env (the value is never shown). */
-  password_var: string
+  /** A password typed in the console is stored (encrypted; the API never returns it). */
+  password_saved: boolean
+  /** Legacy: key of SFTP_PASSWORD_<KEY> in infra/secrets/sftp.env (used when no password is saved). */
+  password_key: string | null
+  password_var: string | null
+  /** What the next connection will authenticate with (null = nothing: enter the password). */
   credentials: "password" | "key" | null
   host_key_fingerprint: string | null
   host_key_trusted_at: string | null

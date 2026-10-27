@@ -5,8 +5,9 @@
  * (double-click / Enter, Backspace = up), search in the folder, list / grid
  * views, sorting, multi-select with checkboxes and Shift-range, folders
  * selectable as a whole ("include sub-folders" at import), already-imported
- * badges, non-media files shown disabled, and a selection bar that opens the
- * import options.
+ * badges, non-media files shown disabled, pages of 10–100 entries (the next
+ * provider page is fetched when the last one is reached) and a selection bar
+ * that opens the import options.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
@@ -28,6 +29,7 @@ import {
   browseDrive, connectSftp, formatBytes, thumbnailUrl,
   type CloudConnection, type CloudProviderInfo, type Crumb, type DriveEntry, type ImportBatch,
 } from "@/lib/cloud-sources-api"
+import { TablePagination } from "@/components/table-pagination"
 import { ProviderIcon } from "./provider-icon"
 import { ImportDialog } from "./import-dialog"
 import { OpenLinkButton } from "./open-link-dialog"
@@ -36,6 +38,12 @@ const S = "cs"
 type SortKey = "name" | "size" | "modified" | "type"
 type View = "list" | "grid"
 const VIEW_KEY = "rr_cs_view"
+const PAGE_SIZE_KEY = "rr_cs_page_size"
+const PAGE_SIZES = [10, 25, 50, 100]
+
+function readPageSize(): number {
+  try { const n = Number(localStorage.getItem(PAGE_SIZE_KEY)); return PAGE_SIZES.includes(n) ? n : 25 } catch { return 25 }
+}
 
 function readView(): View {
   try { return localStorage.getItem(VIEW_KEY) === "grid" ? "grid" : "list" } catch { return "list" }
@@ -70,6 +78,8 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
   const [reconnecting, setReconnecting] = useState(false)
   const isHeld = held || heldByServer
   const [view, setView] = useState<View>("list")
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "name", dir: 1 })
   const [selFiles, setSelFiles] = useState<Map<string, DriveEntry>>(new Map())
   const [selFolders, setSelFolders] = useState<Map<string, DriveEntry>>(new Map())
@@ -80,7 +90,11 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
   const listRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  useEffect(() => { setView(readView()) }, [])
+  useEffect(() => { setView(readView()); setPageSize(readPageSize()) }, [])
+  const changePageSize = (n: number) => {
+    setPageSize(n); setPage(1)
+    try { localStorage.setItem(PAGE_SIZE_KEY, String(n)) } catch { /* ignore */ }
+  }
   const changeView = (v: View) => {
     setView(v)
     try { localStorage.setItem(VIEW_KEY, v) } catch { /* ignore */ }
@@ -122,6 +136,7 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
       }
       setFocus(0)
       setAnchor(null)
+      setPage(1)
     } catch (e) {
       if ((e as Error)?.name === "AbortError") return
       setFolders([]); setFiles([]); setNextToken(null)
@@ -149,7 +164,7 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
   }
 
   const loadMore = async () => {
-    if (!nextToken) return
+    if (!nextToken || loadingMore) return
     setLoadingMore(true)
     try {
       const page = await browseDrive(connection.id, { folderId, q: appliedQuery || null, pageToken: nextToken })
@@ -176,6 +191,18 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
   // Folders always first, then files; both sorted.
   const rows = useMemo(() => [...[...folders].sort(sortFn), ...[...files].sort(sortFn)], [folders, files, sortFn])
   const selectableFiles = useMemo(() => files.filter((f) => f.importable), [files])
+  const pages = Math.max(1, Math.ceil(rows.length / pageSize))
+  const offset = (page - 1) * pageSize
+  const pageRows = rows.slice(offset, offset + pageSize)
+
+  // Back to page 1 when the order changes; never past the last page.
+  useEffect(() => { setPage(1) }, [sort])
+  useEffect(() => { if (page > pages) setPage(pages) }, [page, pages])
+  // Last loaded page reached → fetch the provider's next page (the page count grows).
+  useEffect(() => {
+    if (page >= pages && nextToken && !loading && !loadingMore && !error) loadMore()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pages, nextToken, loading, error])
 
   const open = (f: DriveEntry) => {
     if (f.kind !== "folder") return
@@ -238,7 +265,10 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
   }
 
   useEffect(() => {
+    // Arrow keys past the page edge turn the page.
+    if (rows.length && (focus < offset || focus >= offset + pageSize)) setPage(Math.floor(focus / pageSize) + 1)
     listRef.current?.querySelector<HTMLElement>(`[data-idx="${focus}"]`)?.scrollIntoView({ block: "nearest" })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus])
 
   const selectedBytes = Array.from(selFiles.values()).reduce((s, f) => s + (f.size ?? 0), 0)
@@ -367,7 +397,8 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
               </tr>
             </thead>
             <tbody>
-              {rows.map((e, idx) => {
+              {pageRows.map((e, i) => {
+                const idx = offset + i
                 const disabled = e.kind === "file" && !e.importable
                 const selected = isSelected(e)
                 return (
@@ -417,7 +448,8 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
           </table>
         ) : (
           <div className={cn("grid gap-3 p-4 [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]", loading && "opacity-60")}>
-            {rows.map((e, idx) => {
+            {pageRows.map((e, i) => {
+              const idx = offset + i
               const disabled = e.kind === "file" && !e.importable
               const selected = isSelected(e)
               return (
@@ -461,14 +493,18 @@ export function FileBrowser({ connection, provider, canImport, onImported }: {
             })}
           </div>
         )}
-        {nextToken && !error && (
-          <div className="flex justify-center p-3">
-            <Button variant="outline" size="sm" onClick={loadMore} disabled={loadingMore} className="gap-1.5">
-              {loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}{t(`${S}.loadMore`)}
-            </Button>
+        {loadingMore && (
+          <div className="flex items-center justify-center gap-2 p-3 text-xs text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />{t(`${S}.loadingMore`)}
           </div>
         )}
       </div>
+
+      {!isHeld && !error && rows.length > PAGE_SIZES[0] && (
+        <TablePagination page={page} pageSize={pageSize} total={rows.length} pageSizes={PAGE_SIZES}
+          onPageChange={(p) => { setPage(p); setFocus((p - 1) * pageSize); listRef.current?.scrollTo({ top: 0 }) }}
+          onPageSizeChange={changePageSize} className="py-2" />
+      )}
 
       {/* Selection bar */}
       <div className={cn("flex flex-wrap items-center gap-3 border-t border-border px-4 py-2.5 transition-colors",

@@ -219,8 +219,8 @@ export interface SftpServerInput {
   username: string
   /** Absolute folder browsing starts at; empty = the user's home. */
   base_path?: string | null
-  /** The API reads SFTP_PASSWORD_<KEY> from infra/secrets/sftp.env — never a password here. */
-  password_key: string
+  /** Write-only: stored encrypted by the API, never returned. Omitted / empty on edit = keep it. */
+  password?: string
 }
 
 export interface SftpLogLine {

@@ -5,8 +5,8 @@
  * account, status, watched folder / auto-import, last sync — with reconnect,
  * sync, enable/disable and remove. "Add a source" picks a provider among
  * those with a working flow: a drive starts the OAuth consent; an SFTP
- * server is a profile (host, port, user, base path, password key — the
- * password itself lives in infra/secrets/sftp.env). SFTP cards show the live
+ * server is a profile (host, port, user, base path and its password, stored
+ * encrypted by the API and never shown again). SFTP cards show the live
  * link state with Connect / Reconnect / Disconnect / Edit / Forget host key.
  */
 import { useEffect, useState } from "react"
@@ -288,10 +288,12 @@ export function ConnectionsPanel({ connections, providers, selectedId, onSelect,
                       <div className="flex min-w-0 gap-2">
                         <dt className="shrink-0 text-muted-foreground">{t(`${S}.sftp.password`)}</dt>
                         <dd className={cn("min-w-0 truncate font-medium", !c.sftp.credentials && "text-amber-700 dark:text-amber-400")}
-                          title={c.sftp.password_var}>
-                          {c.sftp.credentials
-                            ? <><KeyRound className="mr-1 inline h-3 w-3" />{t(`${S}.sftp.passwordSet`, { method: c.sftp.credentials })}</>
-                            : t(`${S}.sftp.passwordMissing`, { var: c.sftp.password_var })}
+                          title={!c.sftp.password_saved && c.sftp.password_var ? c.sftp.password_var : undefined}>
+                          {c.sftp.password_saved
+                            ? <><KeyRound className="mr-1 inline h-3 w-3" />{t(`${S}.sftp.passwordSaved`)}</>
+                            : c.sftp.credentials
+                              ? <><KeyRound className="mr-1 inline h-3 w-3" />{t(`${S}.sftp.passwordSet`, { method: c.sftp.credentials })}</>
+                              : t(`${S}.sftp.passwordMissing`)}
                         </dd>
                       </div>
                       <div className="flex min-w-0 gap-2">
@@ -433,6 +435,7 @@ function ConnectDialog({ open, onOpenChange, providers, onSftpCreated }: {
     setName("")
     setSftp({ ...SFTP_BLANK })
   }, [open, providers])
+  useEffect(() => { if (!open) setSftp({ ...SFTP_BLANK }) }, [open])
 
   const addServer = async () => {
     const err = sftpFormError(t, sftp)
@@ -440,8 +443,8 @@ function ConnectDialog({ open, onOpenChange, providers, onSftpCreated }: {
     setConnecting(true)
     try {
       const c = await createSftpServer({ ...sftpPayload(sftp), name: name.trim() || null })
-      if (c.sftp?.credentials) toast.success(t(`${S}.sftp.added`, { name: c.name }))
-      else toast.warning(t(`${S}.sftp.addedNoPassword`, { var: c.sftp?.password_var ?? "SFTP_PASSWORD_<KEY>" }), { duration: 12000 })
+      toast.success(t(`${S}.sftp.added`, { name: c.name }))
+      setSftp({ ...SFTP_BLANK })                    // the typed password is not kept in memory
       onOpenChange(false)
       onSftpCreated(c)
     } catch (e) {
