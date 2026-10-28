@@ -328,6 +328,23 @@ export interface CloudConnection {
   sftp?: SftpInfo | null
   /** Folders bookmarked in the browser (e.g. a OneDrive folder opened from its link). */
   saved_folders?: SavedFolder[]
+  /** "videos": browse / import videos. "events": daily driving-event CSV files (historical / behaviour). */
+  purpose?: SourcePurpose
+  /** Daily files of an "events" source. */
+  event_feed?: EventFeed | null
+}
+
+export type SourcePurpose = "videos" | "events"
+
+export interface EventFeed {
+  files: number
+  imported: number
+  failed: number
+  events: number
+  first_day: string | null
+  last_day: string | null
+  last_file: string | null
+  last_imported_at: string | null
 }
 
 export interface SavedFolder {

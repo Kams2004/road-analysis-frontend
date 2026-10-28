@@ -13,7 +13,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import {
-  AlertTriangle, ChevronDown, Eye, FolderSync, KeyRound, Loader2, MoreHorizontal, Pencil, Plug, PlugZap, Plus, Power,
+  AlertTriangle, ChevronDown, Eye, FileSpreadsheet, FolderSync, KeyRound, Loader2, MoreHorizontal, Pencil, Plug, PlugZap, Plus, Power,
   RefreshCw, ShieldOff, Trash2, Unplug,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -171,6 +171,7 @@ export function ConnectionsPanel({ connections, providers, selectedId, onSelect,
           {connections.map((c) => {
             const selected = c.id === selectedId
             const isSftp = c.provider === "sftp"
+            const isEvents = c.purpose === "events"
             const usable = isSftp ? c.enabled : c.status === "active" && c.enabled
             const link: SftpLinkState = linkStates[c.id] ?? c.sftp?.link_state ?? "disconnected"
             return (
@@ -197,6 +198,12 @@ export function ConnectionsPanel({ connections, providers, selectedId, onSelect,
                           <span className={cn("h-2 w-2 shrink-0 rounded-full", dotTone(c, link))} aria-hidden />
                         )}
                         <p className="truncate text-sm font-semibold">{c.name}</p>
+                        {isEvents && (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-violet-500/12 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 ring-1 ring-inset ring-violet-500/30 dark:text-violet-300"
+                            title={t(`${S}.purpose.eventsHint`)}>
+                            <FileSpreadsheet className="h-3 w-3" />{t(`${S}.purpose.badge`)}
+                          </span>
+                        )}
                       </div>
                       <p className="truncate text-xs text-muted-foreground" title={c.account_email ?? undefined}>
                         {c.account_email || t(`m7.jobs.source.${c.provider}`)}
@@ -215,14 +222,14 @@ export function ConnectionsPanel({ connections, providers, selectedId, onSelect,
                         <DropdownMenuItem onSelect={() => onSelect(c)} disabled={!usable}>
                           <Eye className="mr-2 h-4 w-4" />{t(`${S}.browse`)}
                         </DropdownMenuItem>
-                        {canEdit && (
+                        {canEdit && !isEvents && (
                           <DropdownMenuItem onSelect={() => setWatchFor(c)} disabled={!usable}>
                             <FolderSync className="mr-2 h-4 w-4" />{t(`${S}.watchedFolder`)}
                           </DropdownMenuItem>
                         )}
                         {canEdit && (
-                          <DropdownMenuItem onSelect={() => sync(c)} disabled={!usable || !c.folder_id}>
-                            <RefreshCw className="mr-2 h-4 w-4" />{t(`${S}.syncNow`)}
+                          <DropdownMenuItem onSelect={() => sync(c)} disabled={!usable || (!c.folder_id && !isEvents)}>
+                            <RefreshCw className="mr-2 h-4 w-4" />{t(isEvents ? `${S}.events.checkNow` : `${S}.syncNow`)}
                           </DropdownMenuItem>
                         )}
                         {canEdit && !isSftp && (
@@ -333,6 +340,30 @@ export function ConnectionsPanel({ connections, providers, selectedId, onSelect,
                       </div>
                     )}
 
+                    {isEvents ? (
+                      <dl className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                        <div>
+                          <dt className="text-muted-foreground">{t(`${S}.events.lastDay`)}</dt>
+                          <dd className="font-medium tabular-nums">{c.event_feed?.last_day ?? "—"}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">{t(`${S}.lastSync`)}</dt>
+                          <dd className={cn("font-medium", c.last_sync_status === "error" && "text-destructive")}>
+                            {c.last_sync_at ? fmt(c.last_sync_at) : "—"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">{t(`${S}.events.events`)}</dt>
+                          <dd className="font-medium tabular-nums">{(c.event_feed?.events ?? 0).toLocaleString()}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-muted-foreground">{t(`${S}.events.files`)}</dt>
+                          <dd className={cn("font-medium tabular-nums", (c.event_feed?.failed ?? 0) > 0 && "text-destructive")}>
+                            {c.event_feed?.imported ?? 0}{(c.event_feed?.failed ?? 0) > 0 && ` · ${t(`${S}.events.failedN`, { n: c.event_feed?.failed ?? 0 })}`}
+                          </dd>
+                        </div>
+                      </dl>
+                    ) : (
                     <dl className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
                       <div className="min-w-0">
                         <dt className="text-muted-foreground">{t(`${S}.watched`)}</dt>
@@ -349,6 +380,7 @@ export function ConnectionsPanel({ connections, providers, selectedId, onSelect,
                         <dd className="font-medium tabular-nums">{c.files_imported_total ?? 0}</dd>
                       </div>
                     </dl>
+                    )}
 
                     {c.status === "pending_auth" && (
                       <div className="mt-2.5 flex items-center justify-between gap-2 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-400">

@@ -33,6 +33,7 @@ import {
   listProviders, type CloudConnection, type CloudProviderInfo, type ImportBatch, type SftpLinkState,
 } from "@/lib/cloud-sources-api"
 import { ConnectionsPanel } from "@/components/cloud-sources/connections-panel"
+import { EventFeedPanel } from "@/components/cloud-sources/event-feed-panel"
 import { FileBrowser } from "@/components/cloud-sources/file-browser"
 import { ImportsPanel } from "@/components/cloud-sources/imports-panel"
 import { ProviderIcon } from "@/components/cloud-sources/provider-icon"
@@ -188,8 +189,12 @@ function CloudSourcesInner() {
                 </div>
               ) : (
                 <>
-                  <FileBrowser connection={selected} provider={provider} canImport={canImport} canEdit={can("jobs", "edit")}
-                    onImported={onImported} onConnectionChanged={(c) => onChanged(c)} />
+                  {selected.purpose === "events" ? (
+                    <EventFeedPanel connection={selected} canEdit={can("jobs", "edit")} onChanged={() => onChanged()} />
+                  ) : (
+                    <FileBrowser connection={selected} provider={provider} canImport={canImport} canEdit={can("jobs", "edit")}
+                      onImported={onImported} onConnectionChanged={(c) => onChanged(c)} />
+                  )}
                   {isSftp && (
                     <SftpLogPanel connectionId={selected.id} canClear={can("jobs", "edit")}
                       onState={(st, msg) => onLinkState(selected.id, st, msg)} />

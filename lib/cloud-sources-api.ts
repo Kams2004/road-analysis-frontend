@@ -6,12 +6,12 @@
  * Connection CRUD and the OAuth callback reuse lib/module7-api.ts.
  */
 import { request } from "@/lib/auth-api"
-import type { CloudConnection, SavedFolder, SftpInfo, SftpLinkState } from "@/lib/module7-api"
+import type { CloudConnection, EventFeed, SavedFolder, SftpInfo, SftpLinkState, SourcePurpose } from "@/lib/module7-api"
 
 const P = "/api/proxy"
 const json = (body: unknown) => ({ body: JSON.stringify(body) })
 
-export type { CloudConnection, SavedFolder, SftpInfo, SftpLinkState }
+export type { CloudConnection, EventFeed, SavedFolder, SftpInfo, SftpLinkState, SourcePurpose }
 
 export interface CloudProviderInfo {
   id: "google_drive" | "onedrive" | "sftp" | string
@@ -225,7 +225,36 @@ export interface SftpServerInput {
   base_path?: string | null
   /** Write-only: stored encrypted by the API, never returned. Omitted / empty on edit = keep it. */
   password?: string
+  /** "events": the server drops one driving-event CSV a day (YYYY-MM-DD.csv) in the base folder. */
+  purpose?: SourcePurpose
 }
+
+// ── Daily event files (purpose "events") ──────────────────────────────────────
+
+export interface EventFile {
+  id: string
+  name: string
+  day: string
+  size: number | null
+  status: "pending" | "imported" | "failed"
+  rows: number
+  inserted: number
+  updated: number
+  invalid: number
+  problems: { line: number; reason: string }[] | null
+  by_type: Record<string, number> | null
+  error: string | null
+  attempts: number
+  found_at: string
+  imported_at: string | null
+}
+
+export const listEventFiles = (id: string, skip = 0, limit = 31, init?: RequestInit) =>
+  request<{ total: number; items: EventFile[] }>(`${P}/cloud-connections/${id}/event-files?skip=${skip}&limit=${limit}`, init)
+export const checkEventFiles = (id: string) =>
+  request<{ message: string }>(`${P}/cloud-connections/${id}/event-files/sync`, { method: "POST" })
+export const reimportEventFile = (id: string, fileId: string) =>
+  request<{ message: string }>(`${P}/cloud-connections/${id}/event-files/${fileId}/reimport`, { method: "POST" })
 
 export interface SftpLogLine {
   seq: number

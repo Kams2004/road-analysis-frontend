@@ -9,18 +9,19 @@
  */
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { Eye, EyeOff, Loader2, LockKeyhole } from "lucide-react"
+import { Eye, EyeOff, FileSpreadsheet, FileVideo, Loader2, LockKeyhole } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { errorText } from "@/lib/auth-api"
 import { useI18n } from "@/lib/i18n"
-import { updateSftpServer, type CloudConnection, type SftpServerInput } from "@/lib/cloud-sources-api"
+import { updateSftpServer, type CloudConnection, type SftpServerInput, type SourcePurpose } from "@/lib/cloud-sources-api"
+import { cn } from "@/lib/utils"
 
 const S = "cs"
 
-const blank = { name: "", host: "", port: "22", username: "", base_path: "", password: "" }
+const blank = { name: "", host: "", port: "22", username: "", base_path: "", password: "", purpose: "videos" as SourcePurpose }
 
 /** What the server already has (edit form): a saved password / a legacy secrets-file key. */
 interface Saved { password: boolean; legacyVar: string | null }
@@ -35,8 +36,27 @@ export function SftpServerForm({ value, onChange, idPrefix = "sftp", saved }: {
   const [show, setShow] = useState(false)
   const set = (k: keyof typeof blank) => (e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, [k]: e.target.value })
   const hasSaved = !!saved?.password || !!saved?.legacyVar
+  const purposes: { id: SourcePurpose; icon: typeof FileVideo }[] = [
+    { id: "videos", icon: FileVideo }, { id: "events", icon: FileSpreadsheet }]
   return (
     <div className="space-y-3">
+      <div className="space-y-1.5">
+        <Label>{t(`${S}.purpose.label`)}</Label>
+        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={t(`${S}.purpose.label`)}>
+          {purposes.map(({ id, icon: Icon }) => (
+            <button key={id} type="button" role="radio" aria-checked={value.purpose === id}
+              onClick={() => onChange({ ...value, purpose: id })}
+              className={cn("flex items-start gap-2 rounded-lg border p-2.5 text-left transition-colors",
+                value.purpose === id ? "border-primary bg-primary/5 ring-1 ring-primary/40" : "border-border hover:bg-muted/50")}>
+              <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", id === "events" ? "text-violet-600" : "text-blue-600")} />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{t(`${S}.purpose.${id}`)}</span>
+                <span className="block text-[11px] leading-snug text-muted-foreground">{t(`${S}.purpose.${id}Hint`)}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-3">
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-host`}>{t(`${S}.sftp.host`)}</Label>
@@ -56,8 +76,10 @@ export function SftpServerForm({ value, onChange, idPrefix = "sftp", saved }: {
       <div className="space-y-1.5">
         <Label htmlFor={`${idPrefix}-base`}>{t(`${S}.sftp.basePath`)}</Label>
         <Input id={`${idPrefix}-base`} value={value.base_path} onChange={set("base_path")} className="font-mono text-xs"
-          placeholder="/home/Ymane-New/ft_violations" spellCheck={false} maxLength={1024} />
-        <p className="text-[11px] text-muted-foreground">{t(`${S}.sftp.basePathHint`)}</p>
+          placeholder={value.purpose === "events" ? "/upload" : "/home/Ymane-New/ft_violations"} spellCheck={false} maxLength={1024} />
+        <p className="text-[11px] text-muted-foreground">
+          {t(value.purpose === "events" ? `${S}.purpose.basePathHint` : `${S}.sftp.basePathHint`)}
+        </p>
       </div>
       <div className="space-y-1.5">
         <Label htmlFor={`${idPrefix}-password`}>{t(`${S}.sftp.password`)}</Label>
@@ -90,7 +112,7 @@ export function sftpFormValue(c?: CloudConnection | null): typeof blank {
   if (!c?.sftp) return { ...blank }
   return {
     name: c.name, host: c.sftp.host, port: String(c.sftp.port || 22), username: c.sftp.username,
-    base_path: c.sftp.base_path ?? "", password: "",
+    base_path: c.sftp.base_path ?? "", password: "", purpose: c.purpose ?? "videos",
   }
 }
 
@@ -112,7 +134,7 @@ export function sftpFormError(t: (k: string) => string, v: typeof blank, saved?:
 export function sftpPayload(v: typeof blank): SftpServerInput {
   return {
     name: v.name.trim() || null, host: v.host.trim(), port: Number(v.port) || 22, username: v.username.trim(),
-    base_path: v.base_path.trim() || null, ...(v.password ? { password: v.password } : {}),
+    base_path: v.base_path.trim() || null, ...(v.password ? { password: v.password } : {}), purpose: v.purpose,
   }
 }
 
