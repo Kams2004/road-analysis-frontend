@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { MapCell, MapCircle, LatLon } from "@/components/analytics-cell-map"
 import {
-  AXIS_TICK, PeriodPicker, TOOLTIP_STYLE, SEVERITY_COLOR, intensityColor, useDates,
+  AXIS_TICK, CountryPicker, PeriodPicker, TOOLTIP_STYLE, SEVERITY_COLOR, intensityColor, useDates,
 } from "@/components/driver-behaviour/shared"
 import { Ranking } from "@/components/driver-behaviour/ranking"
 import { EventsTable } from "@/components/driver-behaviour/events-table"
@@ -73,6 +73,7 @@ function DriverBehaviour() {
   const [types, setTypes] = useState<BehaviourType[]>(() => parseTypes(sp.get("types")))
   const [driver, setDriver] = useState(sp.get("driver") ?? "")
   const [vehicle, setVehicle] = useState(sp.get("vehicle") ?? "")
+  const [country, setCountry] = useState(sp.get("country") ?? "")
   const [driverInput, setDriverInput] = useState(driver)
   const [vehicleInput, setVehicleInput] = useState(vehicle)
   const center = useMemo<LatLon | null>(() => {
@@ -82,8 +83,8 @@ function DriverBehaviour() {
 
   const filters = useMemo<BehaviourFilters>(() => ({
     period, date_from: dateFrom || null, date_to: dateTo || null, types,
-    driver: driver || null, vehicle: vehicle || null,
-  }), [period, dateFrom, dateTo, types, driver, vehicle])
+    driver: driver || null, vehicle: vehicle || null, country: country || null,
+  }), [period, dateFrom, dateTo, types, driver, vehicle, country])
 
   const [overview, setOverview] = useState<Overview | null>(null)
   const [heat, setHeat] = useState<Heatmap | null>(null)
@@ -162,6 +163,7 @@ function DriverBehaviour() {
         <div className="flex flex-wrap items-end gap-3">
           <PeriodPicker period={period} dateFrom={dateFrom} dateTo={dateTo}
             onChange={(p) => { setPeriod(p.period); setDateFrom(p.dateFrom); setDateTo(p.dateTo) }} />
+          <CountryPicker value={country} onChange={setCountry} />
           <form onSubmit={applyEntity} className="flex flex-wrap items-end gap-2">
             <label className="space-y-1">
               <span className="block text-xs font-medium text-muted-foreground">{t("dba.driver")}</span>

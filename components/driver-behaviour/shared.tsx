@@ -1,11 +1,12 @@
 "use client"
 
 /** Shared bits of the analytics pages (Module 4 historical, Module 5 driver behaviour). */
-import { Calendar } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Calendar, Globe } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { parseUtc } from "@/components/dashboard/types"
-import { PERIODS, type Period } from "@/lib/behaviour-api"
+import { PERIODS, getCountries, type CountryCount, type Period } from "@/lib/behaviour-api"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
@@ -56,6 +57,31 @@ export function useDates() {
     return d.toLocaleDateString(locale, { day: "2-digit", month: "short" })
   }
   return { date, dateTime, bucket }
+}
+
+/** Country filter (every country by default), listed with their event counts. */
+export function CountryPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useI18n()
+  const [list, setList] = useState<CountryCount[]>([])
+  useEffect(() => { getCountries().then(setList).catch(() => setList([])) }, [])
+  if (!list.length && !value) return null
+  return (
+    <div className="space-y-1">
+      <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><Globe className="h-3 w-3" />{t("dba.country")}</span>
+      <Select value={value || "all"} onValueChange={(v) => onChange(v === "all" ? "" : v)}>
+        <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">{t("dba.countryAll")}</SelectItem>
+          {list.map((c) => (
+            <SelectItem key={c.country} value={c.country}>
+              {c.country} <span className="text-muted-foreground">· {c.events.toLocaleString()}</span>
+            </SelectItem>
+          ))}
+          {value && !list.some((c) => c.country === value) && <SelectItem value={value}>{value}</SelectItem>}
+        </SelectContent>
+      </Select>
+    </div>
+  )
 }
 
 /** Period select (7d … all) + custom date range. */

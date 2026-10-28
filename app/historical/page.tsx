@@ -21,7 +21,7 @@ import { Panel, EmptyState } from "@/components/dashboard/panel"
 import { parseUtc } from "@/components/dashboard/types"
 import { HIGH_RISK, riskColor, type LatLon } from "@/components/historical-route-map"
 import type { MapCell } from "@/components/analytics-cell-map"
-import { AXIS_TICK, PeriodPicker, TOOLTIP_STYLE, useDates } from "@/components/driver-behaviour/shared"
+import { AXIS_TICK, CountryPicker, PeriodPicker, TOOLTIP_STYLE, useDates } from "@/components/driver-behaviour/shared"
 import {
   getHistHeatmap, getHistImports, getHistOverview, getHistTrends, getHistZones,
   type BehaviourFilters, type HistCell, type HistOverview, type HistTrend, type ImportBatch, type Period,
@@ -366,12 +366,13 @@ function Historical() {
   const [period, setPeriod] = useState<Period>((sp.get("period") as Period) || "all")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
+  const [country, setCountry] = useState(sp.get("country") ?? "")
   const center = useMemo<LatLon | null>(() => {
     const lat = Number(sp.get("lat")), lon = Number(sp.get("lon"))
     return sp.get("lat") && sp.get("lon") && Number.isFinite(lat) && Number.isFinite(lon) ? [lat, lon] : null
   }, [sp])
-  const filters = useMemo<BehaviourFilters>(() => ({ period, date_from: dateFrom || null, date_to: dateTo || null }),
-    [period, dateFrom, dateTo])
+  const filters = useMemo<BehaviourFilters>(() => ({ period, date_from: dateFrom || null, date_to: dateTo || null,
+    country: country || null }), [period, dateFrom, dateTo, country])
 
   const [overview, setOverview] = useState<HistOverview | null>(null)
   const [cells, setCells] = useState<HistCell[] | null>(null)
@@ -414,6 +415,7 @@ function Historical() {
       <section className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
         <PeriodPicker period={period} dateFrom={dateFrom} dateTo={dateTo}
           onChange={(p) => { setPeriod(p.period); setDateFrom(p.dateFrom); setDateTo(p.dateTo) }} />
+        <CountryPicker value={country} onChange={setCountry} />
         {loading && <Loader2 className="mb-2 h-4 w-4 animate-spin text-muted-foreground" />}
         <div className="ml-auto flex flex-wrap gap-2 text-xs">
           <a href="#route-safety" className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 font-medium hover:bg-muted">

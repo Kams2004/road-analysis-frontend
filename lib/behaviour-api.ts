@@ -27,6 +27,8 @@ export interface BehaviourFilters {
   driver?: string | null
   vehicle?: string | null
   bbox?: string | null
+  /** Country (customer affiliate as sent by the source, e.g. CAMEROUN); none = every country. */
+  country?: string | null
 }
 
 export function filterQuery(f: BehaviourFilters, extra: Record<string, string | number | null | undefined> = {}): string {
@@ -39,6 +41,7 @@ export function filterQuery(f: BehaviourFilters, extra: Record<string, string | 
   if (f.driver) p.set("driver", f.driver)
   if (f.vehicle) p.set("vehicle", f.vehicle)
   if (f.bbox) p.set("bbox", f.bbox)
+  if (f.country) p.set("country", f.country)
   for (const [k, v] of Object.entries(extra)) if (v != null && v !== "") p.set(k, String(v))
   const s = p.toString()
   return s ? `?${s}` : ""
@@ -209,6 +212,8 @@ export const getHeatmap = (f: BehaviourFilters) => request<Heatmap>(`${DB}/heatm
 export const getTrends = (f: BehaviourFilters) => request<Trends>(`${DB}/trends${filterQuery(f)}`)
 export const getZones = (f: BehaviourFilters) => request<ZoneList>(`${DB}/zones${filterQuery(f)}`)
 export const getMethodology = () => request<Methodology>(`${DB}/methodology`)
+export interface CountryCount { country: string; events: number }
+export const getCountries = () => request<CountryCount[]>(`${DB}/countries`)
 
 // ── Module 4 (historical) ────────────────────────────────────────────────────
 
@@ -255,7 +260,7 @@ export interface ImportBatch {
 
 const H = `${P}/historical`
 const hq = (f: BehaviourFilters, extra: Record<string, string | number | null | undefined> = {}) =>
-  filterQuery({ period: f.period, date_from: f.date_from, date_to: f.date_to, bbox: f.bbox }, extra)
+  filterQuery({ period: f.period, date_from: f.date_from, date_to: f.date_to, bbox: f.bbox, country: f.country }, extra)
 export const getHistOverview = (f: BehaviourFilters) => request<HistOverview>(`${H}/overview${hq(f)}`)
 export const getHistHeatmap = (f: BehaviourFilters) => request<HistCell[]>(`${H}/heatmap${hq(f)}`)
 export const getHistZones = (f: BehaviourFilters, minScore = 0.5, limit = 50) =>
