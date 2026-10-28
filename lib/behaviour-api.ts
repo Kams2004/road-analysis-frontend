@@ -213,6 +213,15 @@ export const getTrends = (f: BehaviourFilters) => request<Trends>(`${DB}/trends$
 export const getZones = (f: BehaviourFilters) => request<ZoneList>(`${DB}/zones${filterQuery(f)}`)
 export const getMethodology = () => request<Methodology>(`${DB}/methodology`)
 export interface CountryCount { country: string; events: number }
+export interface DataStatus {
+  name: string
+  first_day: string | null
+  complete_until: string | null
+  due_until: string
+  missing: string[]
+  failed: string[]
+}
+export const getDataStatus = () => request<DataStatus[]>(`${DB}/data-status`)
 export const getCountries = () => request<CountryCount[]>(`${DB}/countries`)
 
 // ── Module 4 (historical) ────────────────────────────────────────────────────

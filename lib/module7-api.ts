@@ -345,6 +345,15 @@ export interface EventFeed {
   last_day: string | null
   last_file: string | null
   last_imported_at: string | null
+  /** Last day whose file is due by now (day D: D+1 at alert_hour UTC). */
+  due_until?: string | null
+  /** Every day from the first one up to this one is imported. */
+  complete_until?: string | null
+  /** Due days without a file / whose file failed (last 60 days). */
+  missing?: string[]
+  failed_days?: string[]
+  alert_hour?: number
+  alert_emails?: string[]
 }
 
 export interface SavedFolder {

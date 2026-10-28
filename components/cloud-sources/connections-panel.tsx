@@ -363,7 +363,14 @@ export function ConnectionsPanel({ connections, providers, selectedId, onSelect,
                           </dd>
                         </div>
                       </dl>
-                    ) : (
+                    ) : null}
+                    {isEvents && lateDays(c) > 0 && (
+                      <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-800 dark:text-amber-300">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span>{t(`${S}.alerts.card`, { n: lateDays(c), day: [...(c.event_feed?.missing ?? []), ...(c.event_feed?.failed_days ?? [])].sort().pop() ?? "" })}</span>
+                      </div>
+                    )}
+                    {!isEvents && (
                     <dl className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
                       <div className="min-w-0">
                         <dt className="text-muted-foreground">{t(`${S}.watched`)}</dt>
@@ -457,9 +464,15 @@ export function ConnectionsPanel({ connections, providers, selectedId, onSelect,
   )
 }
 
-/** Status dot of a folded card: green usable, amber waiting, red failing, grey off. */
+/** Due days of an event source whose file is missing or failed. */
+function lateDays(c: CloudConnection): number {
+  return (c.event_feed?.missing?.length ?? 0) + (c.event_feed?.failed_days?.length ?? 0)
+}
+
+/** Status dot of a folded card: green usable, amber waiting (or event files missing), red failing, grey off. */
 function dotTone(c: CloudConnection, link: SftpLinkState): string {
   if (!c.enabled) return "bg-slate-400"
+  if (c.purpose === "events" && lateDays(c) > 0 && link !== "error") return "bg-amber-500"
   if (c.provider === "sftp") {
     return link === "connected" ? "bg-emerald-500" : link === "error" ? "bg-red-500"
       : link === "connecting" ? "bg-amber-500" : "bg-slate-400"

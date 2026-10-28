@@ -69,6 +69,7 @@ const en = {
   "topbar.pending": "{count} detection(s) waiting for validation",
   "topbar.activeJobs": "{count} video job(s) processing",
   "topbar.allClear": "Nothing needs your attention",
+  "topbar.eventsMissing": "{name}: {n} day(s) of event data missing",
 
   // ── Languages / providers ────────────────────────────────────────────
   "lang.en": "English",

@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { MapCell, MapCircle, LatLon } from "@/components/analytics-cell-map"
 import {
-  AXIS_TICK, CountryPicker, PeriodPicker, TOOLTIP_STYLE, SEVERITY_COLOR, intensityColor, useDates,
+  AXIS_TICK, CountryPicker, DataCompleteness, PeriodPicker, TOOLTIP_STYLE, SEVERITY_COLOR, intensityColor, useDates,
 } from "@/components/driver-behaviour/shared"
 import { Ranking } from "@/components/driver-behaviour/ranking"
 import { EventsTable } from "@/components/driver-behaviour/events-table"
@@ -217,6 +217,7 @@ function DriverBehaviour() {
             {overview.data_last_event_at && ` · ${t("dba.dataRange", { from: date(overview.data_first_event_at), to: date(overview.data_last_event_at) })}`}
           </p>
         )}
+        <div className="mt-3"><DataCompleteness /></div>
       </section>
 
       {empty && (

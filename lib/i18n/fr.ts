@@ -66,6 +66,7 @@ const fr: Messages = {
   "topbar.pending": "{count} détection(s) en attente de validation",
   "topbar.activeJobs": "{count} traitement(s) vidéo en cours",
   "topbar.allClear": "Rien ne requiert votre attention",
+  "topbar.eventsMissing": "{name} : {n} jour(s) de données d'événements manquant(s)",
 
   // ── Languages / providers ────────────────────────────────────────────
   "lang.en": "English",

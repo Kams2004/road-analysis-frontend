@@ -21,7 +21,7 @@ import { Panel, EmptyState } from "@/components/dashboard/panel"
 import { parseUtc } from "@/components/dashboard/types"
 import { HIGH_RISK, riskColor, type LatLon } from "@/components/historical-route-map"
 import type { MapCell } from "@/components/analytics-cell-map"
-import { AXIS_TICK, CountryPicker, PeriodPicker, TOOLTIP_STYLE, useDates } from "@/components/driver-behaviour/shared"
+import { AXIS_TICK, CountryPicker, DataCompleteness, PeriodPicker, TOOLTIP_STYLE, useDates } from "@/components/driver-behaviour/shared"
 import {
   getHistHeatmap, getHistImports, getHistOverview, getHistTrends, getHistZones,
   type BehaviourFilters, type HistCell, type HistOverview, type HistTrend, type ImportBatch, type Period,
@@ -426,6 +426,7 @@ function Historical() {
           </Link>
         </div>
         {error && <p className="w-full text-sm text-destructive">{t("hist.m4.loadFailed")} ({error})</p>}
+        <div className="basis-full"><DataCompleteness /></div>
       </section>
 
       {empty && (

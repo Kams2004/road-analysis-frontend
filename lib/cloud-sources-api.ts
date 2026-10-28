@@ -172,6 +172,9 @@ export interface AutoImportPatch {
   auto_import?: boolean
   auto_import_models?: string[] | null
   auto_import_frame_skip?: number | null
+  /** Event sources: alert hour (UTC) and the addresses also warned by e-mail. */
+  event_alert_hour?: number | null
+  event_alert_emails?: string[]
 }
 
 export const reauthorizeConnection = (id: string) =>
@@ -253,6 +256,17 @@ export const listEventFiles = (id: string, skip = 0, limit = 31, init?: RequestI
   request<{ total: number; items: EventFile[] }>(`${P}/cloud-connections/${id}/event-files?skip=${skip}&limit=${limit}`, init)
 export const checkEventFiles = (id: string) =>
   request<{ message: string }>(`${P}/cloud-connections/${id}/event-files/sync`, { method: "POST" })
+export interface EventDay {
+  day: string
+  status: "imported" | "failed" | "pending" | "missing" | "waiting" | "none"
+  events: number
+  file: string | null
+  error: string | null
+  file_id: string | null
+}
+export const getEventCalendar = (id: string, month?: string) =>
+  request<{ month: string; days: EventDay[]; feed: EventFeed }>(
+    `${P}/cloud-connections/${id}/event-calendar${month ? `?month=${month}` : ""}`)
 export const reimportEventFile = (id: string, fileId: string) =>
   request<{ message: string }>(`${P}/cloud-connections/${id}/event-files/${fileId}/reimport`, { method: "POST" })
 

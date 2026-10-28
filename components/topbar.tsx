@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useTheme } from "next-themes"
-import { Bell, Briefcase, CalendarDays, CheckCircle, LogOut, Moon, Search, Settings, Sun, UserCog } from "lucide-react"
+import { Bell, Briefcase, FileWarning, CalendarDays, CheckCircle, LogOut, Moon, Search, Settings, Sun, UserCog } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -28,6 +28,7 @@ import { PERIODS, setPeriod, usePeriod, type Period } from "@/components/dashboa
 interface TopbarStats {
   pending_validations: number
   active_jobs: number
+  event_alerts: { connection_id: string; name: string; missing: string[]; failed: string[] }[]
 }
 
 interface PageEntry {
@@ -220,6 +221,7 @@ function Notifications() {
           setStats({
             pending_validations: Number(data.pending_validations ?? 0),
             active_jobs: Number(data.active_jobs ?? 0),
+            event_alerts: Array.isArray(data.event_alerts) ? data.event_alerts : [],
           })
         }
       } catch {
@@ -236,15 +238,18 @@ function Notifications() {
 
   const pending = canSeeStats && canValidations ? stats?.pending_validations ?? 0 : 0
   const jobs = canSeeStats && canJobs ? stats?.active_jobs ?? 0 : 0
+  // Daily event files (fleet exceptions) that did not all arrive — Cloud sources › event source.
+  const eventAlerts = canSeeStats && canJobs ? stats?.event_alerts ?? [] : []
+  const badge = pending + eventAlerts.length
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="relative" aria-label={t("topbar.notifications")}>
           <Bell className="h-5 w-5" />
-          {pending > 0 && (
+          {badge > 0 && (
             <span className="absolute -right-0.5 -top-0.5 min-w-[1.1rem] rounded-full bg-destructive px-1 py-0.5 text-center text-[10px] font-bold leading-none text-white">
-              {pending > 99 ? "99+" : pending}
+              {badge > 99 ? "99+" : badge}
             </span>
           )}
         </Button>
@@ -268,7 +273,23 @@ function Notifications() {
             </Link>
           </DropdownMenuItem>
         )}
-        {pending === 0 && jobs === 0 && (
+        {eventAlerts.map((a) => {
+          const late = [...a.missing, ...a.failed].sort()
+          return (
+            <DropdownMenuItem key={a.connection_id} asChild>
+              <Link href={`/cloud-sources?connection=${a.connection_id}`} className="items-start">
+                <FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <span className="min-w-0">
+                  <span className="block">{t("topbar.eventsMissing", { name: a.name, n: late.length })}</span>
+                  <span className="block text-[11px] text-muted-foreground">
+                    {late.slice(-3).reverse().join(" · ")}{late.length > 3 ? " …" : ""}
+                  </span>
+                </span>
+              </Link>
+            </DropdownMenuItem>
+          )
+        })}
+        {pending === 0 && jobs === 0 && eventAlerts.length === 0 && (
           <p className="px-2 py-3 text-center text-sm text-muted-foreground">{t("topbar.allClear")}</p>
         )}
       </DropdownMenuContent>
