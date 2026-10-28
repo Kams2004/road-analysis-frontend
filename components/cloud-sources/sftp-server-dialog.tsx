@@ -51,7 +51,7 @@ export function SftpServerForm({ value, onChange, idPrefix = "sftp", saved }: {
               <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", id === "events" ? "text-violet-600" : "text-blue-600")} />
               <span className="min-w-0">
                 <span className="block text-sm font-medium">{t(`${S}.purpose.${id}`)}</span>
-                <span className="block text-[11px] leading-snug text-muted-foreground">{t(`${S}.purpose.${id}Hint`)}</span>
+                <span className="block text-[11px] leading-snug text-muted-foreground">{t(`${S}.purpose.${id}Short`)}</span>
               </span>
             </button>
           ))}
@@ -170,7 +170,7 @@ export function SftpServerDialog({ connection, onClose, onSaved }: {
 
   return (
     <Dialog open={!!connection} onOpenChange={(o) => { if (!o && !saving) onClose() }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t(`${S}.sftp.editTitle`)}</DialogTitle>
           <DialogDescription>{t(`${S}.sftp.editDesc`)}</DialogDescription>

@@ -541,13 +541,13 @@ function ConnectDialog({ open, onOpenChange, providers, onSftpCreated }: {
 
   return (
     <Dialog open={open} onOpenChange={reset}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-md">
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t(`${S}.connectTitle`)}</DialogTitle>
           <DialogDescription>{t(`${S}.connectDesc`)}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="grid gap-2" role="radiogroup" aria-label={t(`${S}.provider`)}>
+          <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label={t(`${S}.provider`)}>
             {providers.map((p) => (
               <button
                 key={p.id}
@@ -557,7 +557,7 @@ function ConnectDialog({ open, onOpenChange, providers, onSftpCreated }: {
                 disabled={!p.configured}
                 onClick={() => setProvider(p.id)}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl border p-3 text-left transition-colors",
+                  "flex items-start gap-3 rounded-xl border p-3 text-left transition-colors",
                   provider === p.id ? "border-primary bg-primary/5 ring-1 ring-primary/40" : "border-border hover:bg-muted/50",
                   !p.configured && "cursor-not-allowed opacity-60 hover:bg-transparent",
                 )}
