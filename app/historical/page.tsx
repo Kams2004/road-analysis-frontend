@@ -58,6 +58,7 @@ interface ZoneRiskProfile {
   latest_event_at: string | null
   historical_risk_score: number
   road_name: string | null
+  place?: string | null
 }
 
 // GET /routes/preview → { routes: [{ geometry: [lat, lon][], distance_m, duration_s }] }
@@ -300,10 +301,10 @@ function RouteSafety() {
                       <td className="px-4 py-2">
                         <p className="flex items-center gap-1.5 truncate text-foreground">
                           {z.historical_risk_score >= HIGH_RISK && <Flag className="h-3.5 w-3.5 shrink-0 text-red-600" />}
-                          {z.road_name || z.grid_cell_id}
+                          {z.place || z.road_name || z.grid_cell_id}
                         </p>
-                        <p className="font-mono text-[11px] font-normal text-muted-foreground">
-                          {z.center_latitude.toFixed(5)}, {z.center_longitude.toFixed(5)}
+                        <p className={cn("text-[11px] font-normal text-muted-foreground", !(z.place && z.road_name) && "font-mono")}>
+                          {z.place && z.road_name ? z.road_name : `${z.center_latitude.toFixed(5)}, ${z.center_longitude.toFixed(5)}`}
                         </p>
                       </td>
                       <td className="px-2 py-2">
@@ -402,7 +403,7 @@ function Historical() {
       id: c.grid_cell_id, lat: c.center_latitude, lon: c.center_longitude, sizeM: size,
       color: low ? "#64748b" : riskColor(c.historical_risk_score),
       fillOpacity: low ? 0.15 : 0.5, dashed: low, weight: low ? 1.5 : 1,
-      tooltip: `<b>${c.road_name ?? c.grid_cell_id}</b><br/>${t("dash.hist.col.score")}: ${Math.round(c.historical_risk_score * 100)}% · ${t("dash.hist.col.events")}: ${c.total_events}<br/>${t("hist.m4.coverage")}: ${t(`hist.m4.cov.${c.coverage}`)}`,
+      tooltip: `<b>${c.place ?? c.road_name ?? c.grid_cell_id}</b><br/>${t("dash.hist.col.score")}: ${Math.round(c.historical_risk_score * 100)}% · ${t("dash.hist.col.events")}: ${c.total_events}<br/>${t("hist.m4.coverage")}: ${t(`hist.m4.cov.${c.coverage}`)}`,
     }
   }), [cells, size, t])
   const series = useMemo(() => (trend?.series ?? []).map((p) => ({ ...p, label: bucket(p.bucket, trend!.unit) })), [trend, bucket])
@@ -505,7 +506,7 @@ function Historical() {
                     <tr key={z.grid_cell_id} className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/50"
                       onClick={() => setFocus((f) => ({ id: z.grid_cell_id, n: (f?.n ?? 0) + 1 }))}>
                       <td className="px-4 py-2">
-                        <p className="truncate text-foreground">{z.road_name || `${z.center_latitude.toFixed(4)}, ${z.center_longitude.toFixed(4)}`}</p>
+                        <p className="truncate text-foreground" title={`${z.center_latitude.toFixed(5)}, ${z.center_longitude.toFixed(5)}`}>{z.place || z.road_name || `${z.center_latitude.toFixed(4)}, ${z.center_longitude.toFixed(4)}`}</p>
                         <Link onClick={(e) => e.stopPropagation()}
                           href={`/driver-behaviour?lat=${z.center_latitude.toFixed(5)}&lon=${z.center_longitude.toFixed(5)}&period=all`}
                           className="text-[11px] font-medium text-primary hover:underline">

@@ -147,7 +147,7 @@ function DriverBehaviour() {
   const mapCircles = useMemo<MapCircle[]>(() => (!showZones || !zones) ? [] : zones.items.map((z) => ({
     id: `zone:${z.cell_id}`, lat: z.latitude, lon: z.longitude, radiusM: z.radius_m * 1.3,
     color: TYPE_COLORS[z.dominant_type] ?? "#dc2626",
-    tooltip: `<b>${t("dba.zones.zone", { n: z.rank })}</b> · ${z.road_name ?? ""}<br/>${t("dba.zones.dominant")}: ${typeLabel(z.dominant_type)}<br/>${t("dba.map.events", { n: z.events })}`,
+    tooltip: `<b>${t("dba.zones.zone", { n: z.rank })}</b> · ${z.place ?? z.road_name ?? ""}<br/>${t("dba.zones.dominant")}: ${typeLabel(z.dominant_type)}<br/>${t("dba.map.events", { n: z.events })}`,
   })), [zones, showZones, t, typeLabel])
 
   const series = useMemo(() => (trends?.series ?? []).map((b) => ({ ...b, label: bucket(b.bucket, trends!.unit) })), [trends, bucket])
@@ -307,7 +307,7 @@ function DriverBehaviour() {
                       onClick={() => setFocus((f) => ({ id: `zone:${z.cell_id}`, n: (f?.n ?? 0) + 1 }))}>
                       <td className="px-4 py-2 tabular-nums text-muted-foreground">{z.rank}</td>
                       <td className="px-2 py-2">
-                        <p className="truncate text-foreground">{z.road_name || `${z.latitude.toFixed(4)}, ${z.longitude.toFixed(4)}`}</p>
+                        <p className="truncate text-foreground" title={z.place && z.road_name ? z.road_name : undefined}>{z.place || z.road_name || `${z.latitude.toFixed(4)}, ${z.longitude.toFixed(4)}`}</p>
                         <Link href={`/historical?lat=${z.latitude.toFixed(5)}&lon=${z.longitude.toFixed(5)}`}
                           onClick={(e) => e.stopPropagation()}
                           className="text-[11px] font-medium text-primary hover:underline">

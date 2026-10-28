@@ -102,6 +102,8 @@ export interface BehaviourEvent {
   severity: "low" | "medium" | "high" | "unknown"
   points: number
   road_name: string | null
+  /** Place name (reverse geocoding; null until looked up). */
+  place?: string | null
   grid_cell_id: string
 }
 
@@ -132,6 +134,7 @@ export interface HeatCell {
   count: number
   points: number
   by_type: Record<BehaviourType, number>
+  place?: string | null
 }
 
 export interface Heatmap { window: WindowOut; cell_size_m: number; max_count: number; cells: HeatCell[] }
@@ -165,6 +168,8 @@ export interface BehaviourZone {
   drivers: number
   high_severity: number
   road_name: string | null
+  /** Place name (reverse geocoding; null until looked up). */
+  place?: string | null
   first_event_at: string
   last_event_at: string
 }
@@ -236,6 +241,8 @@ export interface HistCell {
   latest_event_at: string | null
   historical_risk_score: number
   road_name: string | null
+  /** Place name (reverse geocoding; null until looked up). */
+  place?: string | null
   coverage: "low" | "medium" | "good"
 }
 

@@ -227,9 +227,10 @@ function EntityDrawer({ kind, id, filters, onClose, onFilter }: {
                   <ul className="space-y-1 text-xs">
                     {data.zones.slice(0, 8).map((z) => (
                       <li key={z.cell_id} className="flex items-center justify-between gap-2">
-                        <a className="font-mono text-primary hover:underline"
+                        <a className={cn("min-w-0 truncate text-primary hover:underline", !z.place && "font-mono")}
+                          title={`${z.latitude.toFixed(5)}, ${z.longitude.toFixed(5)}`}
                           href={`/driver-behaviour?lat=${z.latitude.toFixed(5)}&lon=${z.longitude.toFixed(5)}`}>
-                          {z.latitude.toFixed(4)}, {z.longitude.toFixed(4)}
+                          {z.place || `${z.latitude.toFixed(4)}, ${z.longitude.toFixed(4)}`}
                         </a>
                         <span className="tabular-nums text-muted-foreground">{t("dba.map.events", { n: z.count })}</span>
                       </li>
@@ -247,7 +248,7 @@ function EntityDrawer({ kind, id, filters, onClose, onFilter }: {
                         <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: TYPE_COLORS[e.event_type] }} />
                         <span className="w-28 shrink-0 truncate">{t(`dash.hist.type.${e.event_type}`)}</span>
                         <SeverityBadge severity={e.severity} />
-                        <span className="flex-1 truncate text-muted-foreground">{e.road_name ?? ""}</span>
+                        <span className="flex-1 truncate text-muted-foreground" title={e.place ?? undefined}>{e.place || e.road_name || ""}</span>
                         {e.speed_kmh != null && <span className="tabular-nums">{Math.round(e.speed_kmh)}{e.speed_limit_kmh ? `/${Math.round(e.speed_limit_kmh)}` : ""} km/h</span>}
                         <span className="whitespace-nowrap text-muted-foreground">{dateTime(e.occurred_at)}</span>
                       </li>

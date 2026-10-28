@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SeverityBadge, useDates } from "@/components/driver-behaviour/shared"
 import { TYPE_COLORS, getEvents, type BehaviourEvent, type BehaviourFilters } from "@/lib/behaviour-api"
 import { useI18n } from "@/lib/i18n"
+import { cn } from "@/lib/utils"
 
 export function EventsTable({ filters }: { filters: BehaviourFilters }) {
   const { t } = useI18n()
@@ -103,11 +104,14 @@ export function EventsTable({ filters }: { filters: BehaviourFilters }) {
                       <p className="text-muted-foreground">{e.vehicle_external_id ?? ""}</p>
                     </td>
                     <td className="px-2 py-2 text-xs">
-                      <p className="max-w-[14rem] truncate text-foreground">{e.road_name ?? ""}</p>
                       <Link href={`/driver-behaviour?lat=${e.latitude.toFixed(5)}&lon=${e.longitude.toFixed(5)}`}
-                        className="font-mono text-[11px] text-primary hover:underline">
-                        {e.latitude.toFixed(5)}, {e.longitude.toFixed(5)}
+                        title={`${e.latitude.toFixed(5)}, ${e.longitude.toFixed(5)}`}
+                        className={cn("block max-w-[16rem] truncate text-primary hover:underline", !e.place && !e.road_name && "font-mono text-[11px]")}>
+                        {e.place || e.road_name || `${e.latitude.toFixed(5)}, ${e.longitude.toFixed(5)}`}
                       </Link>
+                      {e.place && e.road_name && !e.place.includes(e.road_name) && (
+                        <p className="max-w-[16rem] truncate text-[11px] text-muted-foreground">{e.road_name}</p>
+                      )}
                     </td>
                     <td className="px-4 py-2 text-[11px] text-muted-foreground">{e.source}</td>
                   </tr>
