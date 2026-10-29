@@ -2,14 +2,14 @@
 
 /**
  * Reports (Module 14, RRAP-13-011/012/013): PDF reports generated server-side
- * — AI hazards, community reports, historical risk, driver behaviour and
+ * — AI hazards, community reports, historical risk, exception patterns (anonymous) and
  * collision prevention — filtered by type(s), status, period, area (cluster
  * zone / town) and path (road section or from → to, with a corridor). Each
  * generated PDF is kept (history: re-download, delete).
  */
 import { useCallback, useEffect, useState } from "react"
 import {
-  AlertTriangle, ArrowLeftRight, Car, Download, FileBarChart, FileText, History, Loader2, Megaphone,
+  AlertTriangle, ArrowLeftRight, Download, FileBarChart, FileText, Gauge, History, Loader2, Megaphone,
   Route, ShieldAlert, Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -53,7 +53,7 @@ interface Report {
 }
 
 const ICONS: Record<ReportKey, typeof FileText> = {
-  hazards: AlertTriangle, community: Megaphone, historical: History, driver_behaviour: Car, collision: ShieldAlert,
+  hazards: AlertTriangle, community: Megaphone, historical: History, driver_behaviour: Gauge, collision: ShieldAlert,
 }
 const PERIODS = ["7d", "30d", "90d", "12m", "all", "custom"] as const
 type PathMode = "none" | "section" | "route"

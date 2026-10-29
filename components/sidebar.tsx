@@ -67,7 +67,8 @@ export const navigation: NavItem[] = [
   { key: "collisions", labelKey: "dash.nav.collisions", href: "/collisions", icon: Car, module: "collisions" },
   { key: "roadRisk", labelKey: "dash.nav.roadRisk", href: "/road-risk", icon: Route, module: "road_risk" },
   { key: "historical", labelKey: "dash.nav.historical", href: "/historical", icon: History, module: "historical" },
-  { key: "driverBehaviour", labelKey: "dash.nav.driverBehaviour", href: "/driver-behaviour", icon: Gauge, module: "driver_behaviour" },
+  // Exception patterns (anonymous statistics; formerly Driver behaviour — permission module key kept).
+  { key: "exceptionPatterns", labelKey: "dash.nav.exceptionPatterns", href: "/exception-patterns", icon: Gauge, module: "driver_behaviour" },
   { key: "reports", labelKey: "dash.nav.reports", href: "/reports", icon: FileBarChart, module: "reports" },
 ]
 

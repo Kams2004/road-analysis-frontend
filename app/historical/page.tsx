@@ -21,11 +21,11 @@ import { Panel, EmptyState } from "@/components/dashboard/panel"
 import { parseUtc } from "@/components/dashboard/types"
 import { HIGH_RISK, riskColor, type LatLon } from "@/components/historical-route-map"
 import type { MapCell } from "@/components/analytics-cell-map"
-import { AXIS_TICK, CountryPicker, DataCompleteness, PeriodPicker, TOOLTIP_STYLE, useDates } from "@/components/driver-behaviour/shared"
+import { AXIS_TICK, CountryPicker, DataCompleteness, PeriodPicker, TOOLTIP_STYLE, useDates } from "@/components/exception-patterns/shared"
 import {
   getHistHeatmap, getHistImports, getHistOverview, getHistTrends, getHistZones,
-  type BehaviourFilters, type HistCell, type HistOverview, type HistTrend, type ImportBatch, type Period,
-} from "@/lib/behaviour-api"
+  type PatternFilters, type HistCell, type HistOverview, type HistTrend, type ImportBatch, type Period,
+} from "@/lib/exception-patterns-api"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
@@ -335,7 +335,7 @@ function RouteSafety() {
                 ))}
               </ul>
               <p className="mt-3 text-[11px] leading-snug text-muted-foreground">{t("hist.m4.behaviourHint")}</p>
-              <Link href="/driver-behaviour?period=all" className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              <Link href="/exception-patterns?period=all" className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
                 {t("hist.m4.seeBehaviour")}<ChevronRight className="h-3.5 w-3.5" />
               </Link>
             </>
@@ -357,8 +357,8 @@ const COVERAGE_STYLE: Record<string, string> = {
  * Module 4 — Historical Risk Analysis: driving event collection (import
  * history), risk aggregation / score calculation (grid cells 0–1), risk zone
  * identification, road safety heatmap, historical trend analysis, route
- * safety evaluation and this risk reporting dashboard. Per-behaviour
- * analytics (speeding, harsh braking…) live in Module 5 (/driver-behaviour).
+ * safety evaluation and this risk reporting dashboard. The anonymous
+ * per-exception statistics (speeding, harsh braking…) live in Module 9 (/exception-patterns).
  */
 function Historical() {
   const { t } = useI18n()
@@ -372,7 +372,7 @@ function Historical() {
     const lat = Number(sp.get("lat")), lon = Number(sp.get("lon"))
     return sp.get("lat") && sp.get("lon") && Number.isFinite(lat) && Number.isFinite(lon) ? [lat, lon] : null
   }, [sp])
-  const filters = useMemo<BehaviourFilters>(() => ({ period, date_from: dateFrom || null, date_to: dateTo || null,
+  const filters = useMemo<PatternFilters>(() => ({ period, date_from: dateFrom || null, date_to: dateTo || null,
     country: country || null }), [period, dateFrom, dateTo, country])
 
   const [overview, setOverview] = useState<HistOverview | null>(null)
@@ -422,7 +422,7 @@ function Historical() {
           <a href="#route-safety" className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 font-medium hover:bg-muted">
             <RouteIcon className="h-3.5 w-3.5" />{t("hist.m4.routeSafety")}
           </a>
-          <Link href="/driver-behaviour" className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 font-medium hover:bg-muted">
+          <Link href="/exception-patterns" className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 font-medium hover:bg-muted">
             {t("hist.m4.seeBehaviour")}<ChevronRight className="h-3.5 w-3.5" />
           </Link>
         </div>
@@ -508,7 +508,7 @@ function Historical() {
                       <td className="px-4 py-2">
                         <p className="truncate text-foreground" title={`${z.center_latitude.toFixed(5)}, ${z.center_longitude.toFixed(5)}`}>{z.place || z.road_name || `${z.center_latitude.toFixed(4)}, ${z.center_longitude.toFixed(4)}`}</p>
                         <Link onClick={(e) => e.stopPropagation()}
-                          href={`/driver-behaviour?lat=${z.center_latitude.toFixed(5)}&lon=${z.center_longitude.toFixed(5)}&period=all`}
+                          href={`/exception-patterns?lat=${z.center_latitude.toFixed(5)}&lon=${z.center_longitude.toFixed(5)}&period=all`}
                           className="text-[11px] font-medium text-primary hover:underline">
                           {t("hist.m4.behaviourDetails")}
                         </Link>
@@ -533,7 +533,7 @@ function Historical() {
         </Panel>
       </div>
 
-      <Panel title={t("hist.m4.trend", { unit: t(`dba.unit.${trend?.unit ?? "month"}`) })} className="mt-4">
+      <Panel title={t("hist.m4.trend", { unit: t(`xp.unit.${trend?.unit ?? "month"}`) })} className="mt-4">
         {series.every((p) => !p.events) ? <EmptyState>{t("hist.m4.trendEmpty")}</EmptyState> : (
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -565,7 +565,7 @@ function Historical() {
               <thead>
                 <tr className="border-y border-border bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                   <th className="px-4 py-2 font-medium">{t("hist.m4.importedAt")}</th>
-                  <th className="px-2 py-2 font-medium">{t("dba.col.source")}</th>
+                  <th className="px-2 py-2 font-medium">{t("xp.col.source")}</th>
                   <th className="px-2 py-2 text-right font-medium">{t("dash.hist.col.events")}</th>
                   <th className="px-2 py-2 font-medium">{t("hist.route.period")}</th>
                   <th className="px-4 py-2 font-medium">{t("hist.m4.types")}</th>

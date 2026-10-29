@@ -34,7 +34,7 @@ import * as cloudSources from "./extra/cloud-sources"
 import * as trainingData from "./extra/training-data"
 import * as rejectionReasons from "./extra/rejection-reasons"
 import * as clusters from "./extra/clusters"
-import * as driverBehaviour from "./extra/driver-behaviour"
+import * as exceptionPatterns from "./extra/exception-patterns"
 import * as reports from "./extra/reports"
 
 export { signLabel, humanizeSign, subtypeText } from "./extra/traffic-signs"
@@ -42,7 +42,7 @@ export { signLabel, humanizeSign, subtypeText } from "./extra/traffic-signs"
 export type Lang = "en" | "fr" | "es"
 export const LANGS: Lang[] = ["en", "fr", "es"]
 
-const EXTRA = [admin, account, pagesOps, pagesMap, module6, module7, dashboard, community, historical, routes, ai, trafficSigns, parkedVehicle, hazardLifecycle, settingsModules, hazardTrack, clustering, cloudSources, trainingData, rejectionReasons, clusters, driverBehaviour, reports]
+const EXTRA = [admin, account, pagesOps, pagesMap, module6, module7, dashboard, community, historical, routes, ai, trafficSigns, parkedVehicle, hazardLifecycle, settingsModules, hazardTrack, clustering, cloudSources, trainingData, rejectionReasons, clusters, exceptionPatterns, reports]
 const merge = (lang: Lang, core: Record<string, string>) =>
   Object.assign({}, core, ...EXTRA.map((m) => m[lang]))
 

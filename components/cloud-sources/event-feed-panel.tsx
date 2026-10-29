@@ -111,7 +111,7 @@ export function EventFeedPanel({ connection, canEdit, onChanged }: {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline" size="sm" className="gap-1.5">
-              <Link href="/driver-behaviour"><Gauge className="h-4 w-4" />{t(`${S}.events.openBehaviour`)}</Link>
+              <Link href="/exception-patterns"><Gauge className="h-4 w-4" />{t(`${S}.events.openBehaviour`)}</Link>
             </Button>
             <Button asChild variant="outline" size="sm" className="gap-1.5">
               <Link href="/historical"><History className="h-4 w-4" />{t(`${S}.events.openHistorical`)}</Link>

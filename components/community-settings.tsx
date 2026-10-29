@@ -235,14 +235,15 @@ function CollisionCard({ data, onSaved, readOnly }: {
 
 // ── Collision prevention: Context Risk Index ────────────────────────────────
 
-const CTX_FACTORS = ["history", "habitual_speeding", "vehicle_speeding", "hazards", "reports", "driver",
+// No driver factor: the context never identifies a driver or a vehicle (docs/COLLISION-PREVENTION.md 3.4).
+const CTX_FACTORS = ["history", "habitual_speeding", "vehicle_speeding", "hazards", "reports",
   "night", "poor_gps", "stale_data"] as const
 
 // Same defaults as the backend (collision/context_settings.py).
 const CTX_DEFAULTS: Partial<CollisionContextSettings> = {
   enabled: true, max_widening: 0.5, boost_threshold: 0.7, max_boost_steps: 1,
   weights: { history: 0.35, habitual_speeding: 0.15, vehicle_speeding: 0.30, hazards: 0.15, reports: 0.30,
-             driver: 0.25, night: 0.10, poor_gps: 0.10, stale_data: 0.10 },
+             night: 0.10, poor_gps: 0.10, stale_data: 0.10 },
   history_window_days: 365, history_half_life_days: 90, history_saturation: 20,
   speeding_tolerance_pct: 10, speeding_full_excess_pct: 30, hazard_radius_m: 100, report_radius_m: 300,
   night_start_hour: 19, night_end_hour: 6, poor_gps_accuracy_m: 20, refresh_interval_s: 300,

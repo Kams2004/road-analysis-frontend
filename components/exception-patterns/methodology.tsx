@@ -1,29 +1,28 @@
 "use client"
 
-/** Documented behaviour scoring method (RRAP-09-011), editable with settings:edit. */
+/** How the exception statistics are computed (severity rule, bands, zone criteria), editable with
+ *  settings:edit — settings section `driver_behaviour` (key kept), no driver scoring any more. */
 import { useEffect, useState } from "react"
 import { BookOpen, ChevronDown, Loader2, Pencil, Save, X } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { BEHAVIOUR_TYPES, getMethodology, type DriverBehaviourSettings, type Methodology } from "@/lib/behaviour-api"
+import { SEVERITIES, getMethodology, type ExceptionPatternSettings, type Methodology } from "@/lib/exception-patterns-api"
 import { saveSettingsSection } from "@/lib/settings-api"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
-const SEVS = ["low", "medium", "high", "unknown"] as const
-const NUMS: (keyof DriverBehaviourSettings)[] = [
-  "saturation_points", "high_risk_score", "speeding_medium_excess_pct", "speeding_high_excess_pct",
-  "zone_cell_size_m", "zone_min_events", "zone_min_drivers",
+const NUMS: (keyof ExceptionPatternSettings)[] = [
+  "speeding_medium_excess_pct", "speeding_high_excess_pct", "zone_cell_size_m", "zone_min_events",
 ]
 
-export function MethodologyPanel() {
+export function MethodologyPanel({ onSaved }: { onSaved?: () => void }) {
   const { t } = useI18n()
   const { can } = useAuth()
   const canEdit = can("settings", "edit")
   const [open, setOpen] = useState(false)
   const [data, setData] = useState<Methodology | null>(null)
-  const [draft, setDraft] = useState<DriverBehaviourSettings | null>(null)
+  const [draft, setDraft] = useState<ExceptionPatternSettings | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
@@ -38,10 +37,14 @@ export function MethodologyPanel() {
     setSaving(true)
     setError(null)
     try {
-      await saveSettingsSection("driver_behaviour", draft as unknown as Record<string, unknown>)
+      const { severity_multipliers, speeding_medium_excess_pct, speeding_high_excess_pct, zone_cell_size_m, zone_min_events } = draft
+      await saveSettingsSection("driver_behaviour", {
+        severity_multipliers, speeding_medium_excess_pct, speeding_high_excess_pct, zone_cell_size_m, zone_min_events,
+      })
       setData(await getMethodology())
       setDraft(null)
       setSaved(true)
+      onSaved?.()
       setTimeout(() => setSaved(false), 2500)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -58,7 +61,7 @@ export function MethodologyPanel() {
       <button type="button" onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left">
         <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <BookOpen className="h-4 w-4 text-muted-foreground" />{t("dba.method.title")}
+          <BookOpen className="h-4 w-4 text-muted-foreground" />{t("xp.method.title")}
         </span>
         <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
@@ -68,53 +71,52 @@ export function MethodologyPanel() {
           {error && <p className="text-sm text-destructive">{error}</p>}
           {data && s && (
             <>
-              <div className="rounded-lg bg-muted/50 px-3 py-2 font-mono text-xs text-foreground">{data.formula}</div>
-              <p className="text-[11px] text-muted-foreground">{t("dba.method.version", { v: data.version, tz: s.timezone })}</p>
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-foreground">
+                <span className="font-semibold">{t("xp.method.severityRule")}: </span>
+                {t("xp.method.rule", { high: s.speeding_high_excess_pct, medium: s.speeding_medium_excess_pct })}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {t("xp.method.version", { v: data.version, tz: s.timezone })} ·{" "}
+                {t("xp.method.bands", { speed: data.speed_bands_kmh.join(", "), excess: data.excess_bands_pct.join(", ") })}
+              </p>
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <p className="mb-1 text-xs font-semibold">{t("dba.method.typeWeights")}</p>
-                  {BEHAVIOUR_TYPES.map((tp) => (
-                    <Row key={tp} label={t(`dash.hist.type.${tp}`)} value={s.type_weights[tp] ?? 1} edit={!!draft}
-                      onChange={(v) => setDraft({ ...draft!, type_weights: { ...draft!.type_weights, [tp]: num(v) } })} />
-                  ))}
-                </div>
-                <div>
-                  <p className="mb-1 text-xs font-semibold">{t("dba.method.severity")}</p>
-                  {SEVS.map((k) => (
-                    <Row key={k} label={t(`dba.sev.${k}`)} value={s.severity_multipliers[k] ?? 1} edit={!!draft}
-                      onChange={(v) => setDraft({ ...draft!, severity_multipliers: { ...draft!.severity_multipliers, [k]: num(v) } })} />
-                  ))}
-                </div>
-                <div>
-                  <p className="mb-1 text-xs font-semibold">{t("dba.method.criteria")}</p>
+                  <p className="mb-1 text-xs font-semibold">{t("xp.method.criteria")}</p>
                   {NUMS.map((k) => (
-                    <Row key={k} label={t(`dba.method.${k}`)} value={s[k] as number} edit={!!draft}
+                    <Row key={k} label={t(`xp.method.${k}`)} value={s[k] as number} edit={!!draft}
                       onChange={(v) => setDraft({ ...draft!, [k]: num(v) })} />
+                  ))}
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-semibold">{t("xp.method.severity")}</p>
+                  {SEVERITIES.map((k) => (
+                    <Row key={k} label={t(`xp.sev.${k}`)} value={s.severity_multipliers[k] ?? 1} edit={!!draft}
+                      onChange={(v) => setDraft({ ...draft!, severity_multipliers: { ...draft!.severity_multipliers, [k]: num(v) } })} />
                   ))}
                 </div>
               </div>
               <ul className="list-disc space-y-0.5 pl-5 text-[11px] text-muted-foreground">
-                <li>{t("dba.method.note1")}</li>
-                <li>{t("dba.method.note2")}</li>
-                <li>{t("dba.method.note3")}</li>
+                <li>{t("xp.method.note1")}</li>
+                <li>{t("xp.method.note2")}</li>
+                <li>{t("xp.method.note3")}</li>
               </ul>
               {canEdit && (
                 <div className="flex items-center gap-2">
                   {!draft ? (
                     <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setDraft(structuredClone(data.settings))}>
-                      <Pencil className="h-3.5 w-3.5" />{t("dba.method.edit")}
+                      <Pencil className="h-3.5 w-3.5" />{t("xp.method.edit")}
                     </Button>
                   ) : (
                     <>
                       <Button size="sm" className="gap-1.5" onClick={save} disabled={saving}>
-                        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}{t("dba.method.save")}
+                        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}{t("xp.method.save")}
                       </Button>
                       <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => { setDraft(null); setError(null) }}>
-                        <X className="h-3.5 w-3.5" />{t("dba.method.cancel")}
+                        <X className="h-3.5 w-3.5" />{t("xp.method.cancel")}
                       </Button>
                     </>
                   )}
-                  {saved && <span className="text-xs text-emerald-600">{t("dba.method.saved")}</span>}
+                  {saved && <span className="text-xs text-emerald-600">{t("xp.method.saved")}</span>}
                 </div>
               )}
             </>

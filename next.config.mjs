@@ -15,6 +15,10 @@ const nextConfig = {
     root: __dirname,
   },
   poweredByHeader: false,
+  // The anonymous Exception patterns page replaced Driver behaviour (same menu slot): old bookmarks.
+  async redirects() {
+    return [{ source: "/driver-behaviour", destination: "/exception-patterns", permanent: true }]
+  },
   // Browser hardening on every page / route of the console.
   async headers() {
     return [{
