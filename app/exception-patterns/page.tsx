@@ -423,25 +423,37 @@ function CategoryChart({ rows, types, typeLabel, label }: {
   )
 }
 
-/** One bar per normalised severity, in its colour. */
+/** One proportion bar: the share of each normalised severity (high → low), with counts below. */
 function SeverityChart({ rows }: { rows: BreakdownRow[] }) {
-  const { t } = useI18n()
-  const data = rows.map((r) => ({ key: r.key, name: t(`xp.sev.${r.key}`), count: r.count, share: r.share }))
-  if (!data.some((d) => d.count)) return <EmptyState>{t("xp.noData")}</EmptyState>
+  const { t, locale } = useI18n()
+  const order = ["high", "medium", "low", "unknown"]
+  const data = rows.filter((r) => r.count > 0)
+    .sort((a, b) => (order.indexOf(a.key) + 1 || 99) - (order.indexOf(b.key) + 1 || 99))
+  const total = data.reduce((a, r) => a + r.count, 0)
+  if (!total) return <EmptyState>{t("xp.noData")}</EmptyState>
+  const pct = (n: number) => Math.round((n / total) * 1000) / 10
   return (
-    <div className="h-56 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
-          <CartesianGrid vertical={false} stroke="var(--border)" strokeOpacity={0.6} />
-          <XAxis dataKey="name" tick={AXIS_TICK} tickLine={false} axisLine={false} />
-          <YAxis allowDecimals={false} tick={AXIS_TICK} tickLine={false} axisLine={false} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "var(--muted)", opacity: 0.5 }}
-            formatter={(v, _n, p) => [`${v} (${Math.round(((p?.payload as { share?: number })?.share ?? 0) * 100)}%)`, t("xp.col.events")]} />
-          <Bar dataKey="count" maxBarSize={48} radius={[3, 3, 0, 0]}>
-            {data.map((d) => <Cell key={d.key} fill={SEVERITY_COLOR[d.key] ?? SEVERITY_COLOR.unknown} />)}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="space-y-4 py-2">
+      <div className="flex h-9 w-full overflow-hidden rounded-lg bg-muted" role="img"
+        aria-label={data.map((r) => `${t(`xp.sev.${r.key}`)} ${pct(r.count)} %`).join(", ")}>
+        {data.map((r) => (
+          <div key={r.key} title={`${t(`xp.sev.${r.key}`)} · ${r.count.toLocaleString(locale)} (${pct(r.count)} %)`}
+            className="flex items-center justify-center overflow-hidden text-[11px] font-semibold text-white"
+            style={{ width: `${(r.count / total) * 100}%`, background: SEVERITY_COLOR[r.key] ?? SEVERITY_COLOR.unknown }}>
+            {r.count / total >= 0.08 && `${Math.round(pct(r.count))} %`}
+          </div>
+        ))}
+      </div>
+      <ul className="space-y-2">
+        {data.map((r) => (
+          <li key={r.key} className="flex items-center gap-2 text-sm">
+            <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: SEVERITY_COLOR[r.key] ?? SEVERITY_COLOR.unknown }} />
+            <span className="flex-1">{t(`xp.sev.${r.key}`)}</span>
+            <span className="font-semibold tabular-nums">{r.count.toLocaleString(locale)}</span>
+            <span className="w-14 text-right text-xs tabular-nums text-muted-foreground">{pct(r.count)} %</span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

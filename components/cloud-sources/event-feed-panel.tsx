@@ -26,7 +26,7 @@ import {
 } from "@/lib/cloud-sources-api"
 
 const S = "cs"
-const PAGE = 31
+const PAGE = 10
 const TYPE_TONE: Record<string, string> = {
   SPEEDING: "bg-red-500/10 text-red-700 dark:text-red-400",
   HARD_ACCELERATION: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
@@ -247,7 +247,7 @@ export function EventFeedPanel({ connection, canEdit, onChanged }: {
         )}
       </div>
       {data && data.total > PAGE && (
-        <TablePagination page={page} pageSize={PAGE} total={data.total} onPageChange={setPage} className="py-2" />
+        <TablePagination page={page} pageSize={PAGE} total={data.total} onPageChange={setPage} className="border-t border-border py-2" />
       )}
     </div>
   )
