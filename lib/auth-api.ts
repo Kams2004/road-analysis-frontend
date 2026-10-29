@@ -348,6 +348,28 @@ export interface CollisionSettings {
   resolve_after_s: number
   levels: Record<CollisionLevelName, CollisionLevel>
   scenario_multipliers: Record<"head_on" | "crossing" | "same_direction", number>
+  context?: CollisionContextSettings
+}
+
+/** collision.context — Context Risk Index (backend collision/context_settings.py). */
+export interface CollisionContextSettings {
+  enabled: boolean
+  max_widening: number
+  boost_threshold: number
+  max_boost_steps: number
+  weights: Record<string, number>
+  history_window_days: number
+  history_half_life_days: number
+  history_saturation: number
+  speeding_tolerance_pct: number
+  speeding_full_excess_pct: number
+  hazard_radius_m: number
+  report_radius_m: number
+  night_start_hour: number
+  night_end_hour: number
+  poor_gps_accuracy_m: number
+  refresh_interval_s: number
+  [key: string]: unknown
 }
 
 export const getPlatformSettings = () => request<PlatformSettings>(`${P}/platform-settings/`)

@@ -8,6 +8,8 @@ import { StatCard } from "@/components/stat-card"
 import { PageShell } from "@/components/dashboard/page-shell"
 import { Panel, EmptyState } from "@/components/dashboard/panel"
 import { parseUtc } from "@/components/dashboard/types"
+import { CollisionMetricsPanel } from "@/components/collisions/metrics-panel"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
@@ -96,6 +98,15 @@ function Collisions() {
   return (
     <>
       <PageHeader title={t("dash.nav.collisions")} description={t("dash.col.subtitle")} actions={<SettingsLinkButton anchor="collision" />} />
+      <Tabs defaultValue="live">
+        <TabsList className="mb-4">
+          <TabsTrigger value="live">{t("dash.col.tab.live")}</TabsTrigger>
+          <TabsTrigger value="stats">{t("dash.col.tab.stats")}</TabsTrigger>
+        </TabsList>
+        <TabsContent value="stats">
+          <CollisionMetricsPanel />
+        </TabsContent>
+        <TabsContent value="live">
       {error && (
         <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
           {t("dash.col.loadFailed")}
@@ -175,6 +186,8 @@ function Collisions() {
         </Panel>
       </div>
       <p className="mt-3 text-[11px] text-muted-foreground">{t("dash.col.refresh")}</p>
+        </TabsContent>
+      </Tabs>
     </>
   )
 }

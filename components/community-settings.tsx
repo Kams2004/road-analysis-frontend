@@ -10,17 +10,18 @@
  * changed fields (PUT /platform-settings/{section}).
  */
 import { useEffect, useState } from "react"
-import { Car, Loader2, Lock, Smartphone, Users } from "lucide-react"
+import { Car, Layers, Loader2, Lock, RotateCcw, Smartphone, Users } from "lucide-react"
 import { SectionCard, SectionHeading } from "@/components/section-card"
 import { Field, SaveBar, TextField, useSectionForm, type Form } from "@/components/platform-settings"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { useAuth } from "@/components/auth-provider"
 import {
   errorText, getPlatformSettings,
-  type CollisionLevel, type CollisionLevelName, type CollisionSettings, type CommunitySettings, type MobileSettings,
+  type CollisionContextSettings, type CollisionLevel, type CollisionLevelName, type CollisionSettings, type CommunitySettings, type MobileSettings,
 } from "@/lib/auth-api"
 import { useT } from "@/lib/i18n"
 
@@ -232,6 +233,107 @@ function CollisionCard({ data, onSaved, readOnly }: {
   )
 }
 
+// ── Collision prevention: Context Risk Index ────────────────────────────────
+
+const CTX_FACTORS = ["history", "habitual_speeding", "vehicle_speeding", "hazards", "reports", "driver",
+  "night", "poor_gps", "stale_data"] as const
+
+// Same defaults as the backend (collision/context_settings.py).
+const CTX_DEFAULTS: Partial<CollisionContextSettings> = {
+  enabled: true, max_widening: 0.5, boost_threshold: 0.7, max_boost_steps: 1,
+  weights: { history: 0.35, habitual_speeding: 0.15, vehicle_speeding: 0.30, hazards: 0.15, reports: 0.30,
+             driver: 0.25, night: 0.10, poor_gps: 0.10, stale_data: 0.10 },
+  history_window_days: 365, history_half_life_days: 90, history_saturation: 20,
+  speeding_tolerance_pct: 10, speeding_full_excess_pct: 30, hazard_radius_m: 100, report_radius_m: 300,
+  night_start_hour: 19, night_end_hour: 6, poor_gps_accuracy_m: 20, refresh_interval_s: 300,
+}
+
+function ContextCard({ data, onSaved, readOnly }: {
+  data: CollisionSettings; onSaved: (v: CollisionSettings) => void; readOnly: boolean
+}) {
+  const t = useT()
+  const S = "cm.ctx"
+  const form = useSectionForm("collision", data, [], onSaved) as unknown as Form
+  const ctx = (form.values.context ?? {}) as CollisionContextSettings
+  const weights = ctx.weights ?? {}
+  const setCtx = (patch: Partial<CollisionContextSettings>) => form.set("context", { ...ctx, ...patch })
+  const num = (name: keyof CollisionContextSettings & string, step = "1", min?: number, max?: number) => (
+    <Field key={name} label={t(`${S}.${name}`)} hint={t(`${S}.${name}Hint`) === `${S}.${name}Hint` ? undefined : t(`${S}.${name}Hint`)}>
+      <Input
+        type="number" step={step} min={min} max={max}
+        value={(ctx[name] as number | undefined) ?? ""}
+        onChange={(e) => setCtx({ [name]: Number(e.target.value) })}
+        disabled={readOnly}
+      />
+    </Field>
+  )
+  return (
+    <SectionCard id="collision-context" className="xl:col-span-2" icon={Layers} tone="purple"
+                 title={t(`${S}.title`)} description={t(`${S}.desc`)}>
+      {form.errors.context && <p className="text-xs text-destructive">{form.errors.context}</p>}
+      <div className="flex items-center justify-between gap-4 rounded-lg border border-border px-3 py-2.5">
+        <div>
+          <Label htmlFor="ctx-enabled" className="leading-snug">{t(`${S}.enabled`)}</Label>
+          <p className="text-xs text-muted-foreground">{t(`${S}.enabledHint`)}</p>
+        </div>
+        <Switch id="ctx-enabled" checked={ctx.enabled !== false} onCheckedChange={(v) => setCtx({ enabled: v })} disabled={readOnly} />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        {num("max_widening", "0.05", 0, 1)}
+        {num("boost_threshold", "0.05", 0.05, 1)}
+        {num("max_boost_steps", "1", 0, 1)}
+      </div>
+      <Field label={t(`${S}.weights`)} hint={t(`${S}.weightsHint`)}>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {CTX_FACTORS.map((f) => (
+            <label key={f} className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5">
+              <span className="flex-1 text-xs">{t(`${S}.f.${f}`)}</span>
+              <Input
+                type="number" step="0.05" min={0} max={1}
+                className="h-7 w-20 text-right text-xs"
+                value={weights[f] ?? ""}
+                onChange={(e) => setCtx({ weights: { ...weights, [f]: Number(e.target.value) } })}
+                disabled={readOnly}
+                aria-label={t(`${S}.f.${f}`)}
+              />
+            </label>
+          ))}
+        </div>
+      </Field>
+      <Field label={t(`${S}.history`)} hint={t(`${S}.historyHint`)}>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {num("history_window_days", "1", 7, 3650)}
+          {num("history_half_life_days", "1", 1, 3650)}
+          {num("history_saturation", "1", 1)}
+        </div>
+      </Field>
+      <Field label={t(`${S}.places`)}>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {num("speeding_tolerance_pct", "1", 0, 200)}
+          {num("speeding_full_excess_pct", "1", 1, 500)}
+          {num("hazard_radius_m", "10", 10, 1000)}
+          {num("report_radius_m", "10", 10, 3000)}
+        </div>
+      </Field>
+      <Field label={t(`${S}.conditions`)}>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {num("night_start_hour", "1", 0, 23)}
+          {num("night_end_hour", "1", 0, 23)}
+          {num("poor_gps_accuracy_m", "1", 1, 500)}
+          {num("refresh_interval_s", "60", 60, 86400)}
+        </div>
+      </Field>
+      <SaveBar form={form} readOnly={readOnly} t={t}>
+        {!readOnly && (
+          <Button type="button" variant="outline" size="sm" onClick={() => setCtx(CTX_DEFAULTS)}>
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> {t(`${S}.reset`)}
+          </Button>
+        )}
+      </SaveBar>
+    </SectionCard>
+  )
+}
+
 // ── Public blocks ───────────────────────────────────────────────────────────
 
 type Data = { community: CommunitySettings; mobile: MobileSettings; collision: CollisionSettings }
@@ -273,6 +375,7 @@ export function CommunitySettingsSection({ only, heading = true }: { only?: (key
           {show("community") && data.community && <CommunityCard data={data.community} onSaved={update("community")} readOnly={readOnly} />}
           {show("mobile") && data.mobile && <MobileCard data={data.mobile} onSaved={update("mobile")} readOnly={readOnly} />}
           {show("collision") && data.collision && <CollisionCard data={data.collision} onSaved={update("collision")} readOnly={readOnly} />}
+          {show("collision") && data.collision?.context && <ContextCard data={data.collision} onSaved={update("collision")} readOnly={readOnly} />}
         </div>
       )}
     </section>
