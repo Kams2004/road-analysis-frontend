@@ -1,9 +1,10 @@
 "use client"
 
 /**
- * An "events" source (cloud sources page, instead of the file browser): the daily driving-event
- * files it dropped (YYYY-MM-DD.csv, ~03:00 for the previous day), what each import did, "Check now"
- * and "Import again". The events feed Historical analysis and Driver behaviour.
+ * An "events" source (cloud sources page, instead of the file browser): the daily exception files
+ * its providers drop (YYYY-MM-DD_<source>.csv, ~03:00 for the previous day, several a day), the
+ * files on the server now (scheduled ones can be processed at once), what each import did, "Check
+ * now" and "Import again". The events feed Historical analysis and Exception patterns.
  */
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
@@ -16,6 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { TablePagination } from "@/components/table-pagination"
 import { EventAlertSettings, EventCalendar } from "./event-calendar"
+import { RemoteEventFiles, SourceBadge } from "./remote-event-files"
 import { errorText } from "@/lib/auth-api"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
@@ -141,7 +143,10 @@ export function EventFeedPanel({ connection, canEdit, onChanged }: {
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <div className="space-y-0.5">
               {(feed.missing?.length ?? 0) > 0 && (
-                <p><span className="font-semibold">{t(`${S}.alerts.missing`)}</span> {feed.missing!.map(day).join(" · ")}</p>
+                <p><span className="font-semibold">{t(`${S}.alerts.missing`)}</span> {feed.missing!.map((d) => {
+                  const who = feed.missing_sources?.[d]
+                  return who?.length ? `${day(d)} (${who.join(", ")})` : day(d)
+                }).join(" · ")}</p>
               )}
               {(feed.failed_days?.length ?? 0) > 0 && (
                 <p><span className="font-semibold">{t(`${S}.alerts.failed`)}</span> {feed.failed_days!.map(day).join(" · ")}</p>
@@ -156,6 +161,7 @@ export function EventFeedPanel({ connection, canEdit, onChanged }: {
           <EventCalendar connection={connection} canEdit={canEdit} onChanged={onChanged} />
           {canEdit ? <EventAlertSettings connection={connection} onSaved={() => onChanged()} /> : <div />}
         </div>
+        <RemoteEventFiles connection={connection} canEdit={canEdit} onProcessed={() => { load(); onChanged() }} />
         {connection.last_sync_status === "error" && connection.last_sync_error && (
           <Alert variant="destructive"><AlertDescription className="text-xs">{connection.last_sync_error}</AlertDescription></Alert>
         )}
@@ -189,7 +195,9 @@ export function EventFeedPanel({ connection, canEdit, onChanged }: {
                 <tr key={f.id} className="border-b border-border/60 align-top">
                   <td className="px-4 py-2">
                     <p className="font-medium">{day(f.day)}</p>
-                    <p className="font-mono text-[11px] text-muted-foreground">{f.name} · {formatBytes(f.size, locale)}</p>
+                    <p className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                      <SourceBadge source={f.source} />{f.name} · {formatBytes(f.size, locale)}
+                    </p>
                   </td>
                   <td className="py-2 pr-3"><FileStatus f={f} /></td>
                   <td className="whitespace-nowrap py-2 pr-3 text-right tabular-nums">

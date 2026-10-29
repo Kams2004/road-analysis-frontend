@@ -175,6 +175,8 @@ export interface AutoImportPatch {
   /** Event sources: alert hour (UTC) and the addresses also warned by e-mail. */
   event_alert_hour?: number | null
   event_alert_emails?: string[]
+  /** Event sources: hour (UTC) of D+1 from which the day D files are processed. */
+  event_process_hour?: number | null
 }
 
 export const reauthorizeConnection = (id: string) =>
@@ -228,7 +230,7 @@ export interface SftpServerInput {
   base_path?: string | null
   /** Write-only: stored encrypted by the API, never returned. Omitted / empty on edit = keep it. */
   password?: string
-  /** "events": the server drops one driving-event CSV a day (YYYY-MM-DD.csv) in the base folder. */
+  /** "events": the server drops its daily exception CSVs (YYYY-MM-DD_<source>.csv) in the base folder. */
   purpose?: SourcePurpose
 }
 
@@ -238,6 +240,8 @@ export interface EventFile {
   id: string
   name: string
   day: string
+  /** Provider, from the name (2026-10-28_besafe.csv → besafe). */
+  source: string | null
   size: number | null
   status: "pending" | "imported" | "failed"
   rows: number
@@ -263,10 +267,32 @@ export interface EventDay {
   file: string | null
   error: string | null
   file_id: string | null
+  /** Each provider expected that day → its file's status. */
+  sources?: Record<string, "imported" | "failed" | "pending" | "missing" | "waiting"> | null
+  missing_sources?: string[] | null
 }
 export const getEventCalendar = (id: string, month?: string) =>
   request<{ month: string; days: EventDay[]; feed: EventFeed }>(
     `${P}/cloud-connections/${id}/event-calendar${month ? `?month=${month}` : ""}`)
+/** A file in the folder of an events source, as the server lists it now. */
+export interface RemoteEventFile {
+  name: string
+  day: string
+  source: string
+  size: number | null
+  modified_at: string | null
+  state: "imported" | "scheduled" | "queued" | "failed" | "changed"
+  due_at: string
+  file_id: string | null
+  events: number
+  imported_at: string | null
+  error: string | null
+}
+export const listRemoteEventFiles = (id: string, init?: RequestInit) =>
+  request<{ listed_at: string; process_hour: number; items: RemoteEventFile[] }>(
+    `${P}/cloud-connections/${id}/event-files/remote`, init)
+export const processEventFiles = (id: string, names: string[]) =>
+  request<{ message: string }>(`${P}/cloud-connections/${id}/event-files/process`, { method: "POST", ...json({ names }) })
 export const reimportEventFile = (id: string, fileId: string) =>
   request<{ message: string }>(`${P}/cloud-connections/${id}/event-files/${fileId}/reimport`, { method: "POST" })
 

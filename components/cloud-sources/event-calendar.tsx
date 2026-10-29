@@ -108,7 +108,11 @@ export function EventCalendar({ connection, canEdit, onChanged }: {
               <TooltipTrigger asChild>{cell}</TooltipTrigger>
               <TooltipContent className="max-w-xs">
                 <p className="font-medium">{t(`${S}.cal.status.${d.status}`)}</p>
-                {d.file && <p className="font-mono text-[11px]">{d.file}</p>}
+                {d.sources && Object.keys(d.sources).length > 1
+                  ? Object.entries(d.sources).map(([src, st]) => (
+                    <p key={src} className="text-[11px]"><span className="font-mono">{src}</span> · {t(`${S}.cal.status.${st}`)}</p>
+                  ))
+                  : d.file && <p className="font-mono text-[11px]">{d.file}</p>}
                 {d.status === "imported" && <p>{t(`${S}.cal.events`, { n: d.events })}</p>}
                 {d.error && <p className="break-words">{d.error}</p>}
                 {actionable && <p className="mt-1 flex items-center gap-1"><RotateCcw className="h-3 w-3" />
@@ -137,19 +141,23 @@ export function EventAlertSettings({ connection, onSaved }: {
   const { t } = useI18n()
   const feed = connection.event_feed
   const [hour, setHour] = useState(String(feed?.alert_hour ?? 10))
+  const [processHour, setProcessHour] = useState(String(feed?.process_hour ?? 4))
   const [emails, setEmails] = useState((feed?.alert_emails ?? []).join(", "))
   const [saving, setSaving] = useState(false)
   useEffect(() => {
     setHour(String(connection.event_feed?.alert_hour ?? 10))
+    setProcessHour(String(connection.event_feed?.process_hour ?? 4))
     setEmails((connection.event_feed?.alert_emails ?? []).join(", "))
-  }, [connection.id, connection.event_feed?.alert_hour, connection.event_feed?.alert_emails])
+  }, [connection.id, connection.event_feed?.alert_hour, connection.event_feed?.process_hour, connection.event_feed?.alert_emails])
 
   const save = async () => {
     const list = emails.split(/[\s,;]+/).map((e) => e.trim()).filter(Boolean)
     if (list.some((e) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))) { toast.error(t(`${S}.alerts.badEmail`)); return }
     setSaving(true)
     try {
-      onSaved(await updateAutoImport(connection.id, { event_alert_hour: Number(hour), event_alert_emails: list }))
+      onSaved(await updateAutoImport(connection.id, {
+        event_alert_hour: Number(hour), event_process_hour: Number(processHour), event_alert_emails: list,
+      }))
       toast.success(t(`${S}.alerts.saved`))
     } catch (e) {
       toast.error(errorText(t, e, S))
@@ -162,7 +170,16 @@ export function EventAlertSettings({ connection, onSaved }: {
     <div className="space-y-2 rounded-lg border border-border bg-background p-3">
       <p className="flex items-center gap-1.5 text-sm font-medium"><Mail className="h-4 w-4 text-muted-foreground" />{t(`${S}.alerts.title`)}</p>
       <p className="text-[11px] text-muted-foreground">{t(`${S}.alerts.hint`)}</p>
-      <div className="grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)_auto] sm:items-end">
+      <div className="grid gap-2 sm:grid-cols-[150px_150px_minmax(0,1fr)_auto] sm:items-end">
+        <div className="space-y-1">
+          <Label className="text-xs" title={t(`${S}.alerts.processHourHint`)}>{t(`${S}.alerts.processHour`)}</Label>
+          <Select value={processHour} onValueChange={setProcessHour}>
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {Array.from({ length: 24 }, (_, h) => <SelectItem key={h} value={String(h)}>{`${String(h).padStart(2, "0")}:00 UTC`}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="space-y-1">
           <Label className="text-xs">{t(`${S}.alerts.hour`)}</Label>
           <Select value={hour} onValueChange={setHour}>

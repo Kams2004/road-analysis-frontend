@@ -354,6 +354,12 @@ export interface EventFeed {
   failed_days?: string[]
   alert_hour?: number
   alert_emails?: string[]
+  /** Hour (UTC) of D+1 from which the day D files are processed. */
+  process_hour?: number
+  /** Providers seen in the file names (2026-10-28_besafe.csv → besafe). */
+  sources?: string[]
+  /** Due days with a provider's file missing: { "2026-10-28": ["besafe"] }. */
+  missing_sources?: Record<string, string[]>
 }
 
 export interface SavedFolder {

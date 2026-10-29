@@ -660,6 +660,135 @@ function DetectionPanel({ item, initialMode, reasonLabel, onDecided, onChanged, 
           </div>
         </section>
 
+        {/* Decision — right under the evidence: decide without scrolling */}
+        {status === "pending" && canEdit && (
+          <section className="space-y-4 rounded-lg border p-4">
+            {mode !== "correct" && mode !== "reject" && (
+              <>
+                {cur.type === "pothole" && <SeveritySelect value={severity} onChange={setSeverity} />}
+                <NoteField value={note} onChange={setNote} />
+                <div className="flex flex-wrap gap-2">
+                  <Button className="flex-1 bg-success text-white hover:bg-success/90" disabled={busy} onClick={accept}>
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}{t("m6.act.accept")}
+                  </Button>
+                  <Button variant="outline" className="flex-1" disabled={busy} onClick={() => setMode("correct")}>
+                    <Edit2 className="h-4 w-4" />{t("m6.act.correct")}
+                  </Button>
+                  <Button variant="outline" className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10" disabled={busy} onClick={() => setMode("reject")}>
+                    <XCircle className="h-4 w-4" />{t("m6.act.reject")}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {mode === "correct" && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium">{t("m6.act.correctTitle")}</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>{t("m6.filter.type")}</Label>
+                    <Select value={newType} onValueChange={(v) => { setNewType(v); setNewSubtype("none") }}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Array.from(new Set<string>([...DETECTION_TYPES, cur.type])).map((ty) => (
+                          <SelectItem key={ty} value={ty}>{L.typeLabel(ty)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {newType === "traffic_sign" ? (
+                    <SignPicker value={newSubtype === "none" ? null : newSubtype} onChange={setNewSubtype}
+                      candidates={cur.class_candidates}
+                      extraCodes={[cur.subtype, cur.predicted_subtype].filter((c): c is string => !!c && cur.type === "traffic_sign")} />
+                  ) : subtypes.length > 0 && (
+                    <div className="space-y-1.5">
+                      <Label>{t("pmap.val.subtype")}</Label>
+                      <Select value={newSubtype} onValueChange={setNewSubtype}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">—</SelectItem>
+                          {Array.from(new Set([...subtypes, ...(cur.subtype && newType === cur.type && cur.type !== "pothole" ? [cur.subtype] : [])])).map((s) => (
+                            <SelectItem key={s} value={s}>{L.subtypeLabel(newType, s)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {newType === "pothole" && <SeveritySelect value={severity} onChange={setSeverity} />}
+                </div>
+                <NoteField value={note} onChange={setNote} />
+                <div className="flex gap-2">
+                  <Button className="flex-1" disabled={busy || (newType === cur.type && (newSubtype === "none" ? null : newSubtype) === (cur.subtype ?? null) && newType !== "pothole")} onClick={correct}>
+                    {busy && <Loader2 className="h-4 w-4 animate-spin" />}{t("m6.act.saveCorrection")}
+                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={() => setMode("idle")}>{t("common.cancel")}</Button>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {(status === "pending" || status === "location_pending") && canEdit && mode === "reject" && (
+          <section className="space-y-3 rounded-lg border border-destructive/30 p-4">
+            <div className="flex items-center justify-between">
+              <Label>{t("pmap.val.rejectionReason")} <span className="text-destructive">*</span></Label>
+              {canAddReason && (
+                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-primary" onClick={() => setAddingReason(true)}>
+                  <Plus className="h-3.5 w-3.5" /> {t("pmap.val.addReason")}
+                </Button>
+              )}
+            </div>
+            <div className="grid max-h-72 gap-2 overflow-y-auto pr-1" role="radiogroup" aria-label={t("pmap.val.rejectionReason")}>
+              {reasons === null ? (
+                <p className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{t("pmap.val.loadingReasons")}</p>
+              ) : !reasons.length ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">{t("pmap.val.noReasons")}</p>
+              ) : REJECTION_KINDS.map((k) => {
+                const group = reasons.filter((r) => kindOf(r) === k)
+                if (!group.length) return null
+                return (
+                  <div key={k} className="space-y-1.5" role="group" aria-label={t(`rej.kind.${k}`)}>
+                    <p className="flex items-center gap-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" title={t(`rej.kind.${k}.help`)}>
+                      <span className={cn("h-2 w-2 shrink-0 rounded-full border", KIND_BADGE[k])} />{t(`rej.kind.${k}`)}
+                    </p>
+                    {group.map((r) => (
+                      <button key={r.id} type="button" role="radio" aria-checked={reasonCode === r.code} onClick={() => setReasonCode(r.code)}
+                        className={cn("flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
+                          reasonCode === r.code ? "border-destructive bg-destructive/10" : "bg-muted/30 hover:border-destructive/50")}>
+                        <span className={cn("mt-0.5 h-4 w-4 shrink-0 rounded-full border-2", reasonCode === r.code ? "border-destructive bg-destructive" : "border-muted-foreground")} />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium">{L.tl(`rej.code.${r.code}`, r.label)}{r.is_custom && <span className="ml-1.5 text-xs text-muted-foreground">{t("pmap.val.custom")}</span>}</span>
+                          {r.description && r.description !== r.label && t(`rej.code.${r.code}`) === `rej.code.${r.code}` && <span className="block text-xs text-muted-foreground">{r.description}</span>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+            {addingReason && (
+              <div className="flex flex-wrap gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
+                <Input className="h-8 min-w-40 flex-1 text-sm" placeholder={t("pmap.val.reasonLabelPlaceholder")} value={newReasonLabel} onChange={(e) => setNewReasonLabel(e.target.value)} />
+                <Select value={newReasonKind} onValueChange={(v) => setNewReasonKind(v as RejectionKind)}>
+                  <SelectTrigger className="h-8 w-full text-xs sm:w-56" aria-label={t("rej.kind.label")}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {REJECTION_KINDS.map((k) => <SelectItem key={k} value={k} className="text-xs">{t(`rej.kind.${k}`)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Button size="sm" className="h-8" disabled={busy || !newReasonLabel.trim()} onClick={addReason}>{t("pmap.val.saveSelect")}</Button>
+                <Button size="sm" variant="ghost" className="h-8" onClick={() => setAddingReason(false)}>{t("common.cancel")}</Button>
+              </div>
+            )}
+            <NoteField value={note} onChange={setNote} />
+            <div className="flex gap-2">
+              <Button variant="destructive" className="flex-1" disabled={busy || !reasonCode} onClick={reject}>
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}{t("pmap.val.confirmReject")}
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => setMode("idle")}>{t("common.cancel")}</Button>
+            </div>
+          </section>
+        )}
+
         {/* Classification */}
         <section className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2">
           <Info label={t("m6.ev.class")}>
@@ -774,134 +903,6 @@ function DetectionPanel({ item, initialMode, reasonLabel, onDecided, onChanged, 
           </section>
         )}
 
-        {/* Actions */}
-        {status === "pending" && canEdit && (
-          <section className="space-y-4 border-t pt-4">
-            {mode !== "correct" && mode !== "reject" && (
-              <>
-                {cur.type === "pothole" && <SeveritySelect value={severity} onChange={setSeverity} />}
-                <NoteField value={note} onChange={setNote} />
-                <div className="flex flex-wrap gap-2">
-                  <Button className="flex-1 bg-success text-white hover:bg-success/90" disabled={busy} onClick={accept}>
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}{t("m6.act.accept")}
-                  </Button>
-                  <Button variant="outline" className="flex-1" disabled={busy} onClick={() => setMode("correct")}>
-                    <Edit2 className="h-4 w-4" />{t("m6.act.correct")}
-                  </Button>
-                  <Button variant="outline" className="flex-1 border-destructive/30 text-destructive hover:bg-destructive/10" disabled={busy} onClick={() => setMode("reject")}>
-                    <XCircle className="h-4 w-4" />{t("m6.act.reject")}
-                  </Button>
-                </div>
-              </>
-            )}
-
-            {mode === "correct" && (
-              <div className="space-y-3">
-                <p className="text-sm font-medium">{t("m6.act.correctTitle")}</p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label>{t("m6.filter.type")}</Label>
-                    <Select value={newType} onValueChange={(v) => { setNewType(v); setNewSubtype("none") }}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {Array.from(new Set<string>([...DETECTION_TYPES, cur.type])).map((ty) => (
-                          <SelectItem key={ty} value={ty}>{L.typeLabel(ty)}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {newType === "traffic_sign" ? (
-                    <SignPicker value={newSubtype === "none" ? null : newSubtype} onChange={setNewSubtype}
-                      candidates={cur.class_candidates}
-                      extraCodes={[cur.subtype, cur.predicted_subtype].filter((c): c is string => !!c && cur.type === "traffic_sign")} />
-                  ) : subtypes.length > 0 && (
-                    <div className="space-y-1.5">
-                      <Label>{t("pmap.val.subtype")}</Label>
-                      <Select value={newSubtype} onValueChange={setNewSubtype}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">—</SelectItem>
-                          {Array.from(new Set([...subtypes, ...(cur.subtype && newType === cur.type && cur.type !== "pothole" ? [cur.subtype] : [])])).map((s) => (
-                            <SelectItem key={s} value={s}>{L.subtypeLabel(newType, s)}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                  {newType === "pothole" && <SeveritySelect value={severity} onChange={setSeverity} />}
-                </div>
-                <NoteField value={note} onChange={setNote} />
-                <div className="flex gap-2">
-                  <Button className="flex-1" disabled={busy || (newType === cur.type && (newSubtype === "none" ? null : newSubtype) === (cur.subtype ?? null) && newType !== "pothole")} onClick={correct}>
-                    {busy && <Loader2 className="h-4 w-4 animate-spin" />}{t("m6.act.saveCorrection")}
-                  </Button>
-                  <Button variant="outline" className="flex-1" onClick={() => setMode("idle")}>{t("common.cancel")}</Button>
-                </div>
-              </div>
-            )}
-          </section>
-        )}
-
-        {(status === "pending" || status === "location_pending") && canEdit && mode === "reject" && (
-          <section className="space-y-3 border-t pt-4">
-            <div className="flex items-center justify-between">
-              <Label>{t("pmap.val.rejectionReason")} <span className="text-destructive">*</span></Label>
-              {canAddReason && (
-                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-primary" onClick={() => setAddingReason(true)}>
-                  <Plus className="h-3.5 w-3.5" /> {t("pmap.val.addReason")}
-                </Button>
-              )}
-            </div>
-            <div className="grid max-h-72 gap-2 overflow-y-auto pr-1" role="radiogroup" aria-label={t("pmap.val.rejectionReason")}>
-              {reasons === null ? (
-                <p className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{t("pmap.val.loadingReasons")}</p>
-              ) : !reasons.length ? (
-                <p className="py-4 text-center text-sm text-muted-foreground">{t("pmap.val.noReasons")}</p>
-              ) : REJECTION_KINDS.map((k) => {
-                const group = reasons.filter((r) => kindOf(r) === k)
-                if (!group.length) return null
-                return (
-                  <div key={k} className="space-y-1.5" role="group" aria-label={t(`rej.kind.${k}`)}>
-                    <p className="flex items-center gap-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" title={t(`rej.kind.${k}.help`)}>
-                      <span className={cn("h-2 w-2 shrink-0 rounded-full border", KIND_BADGE[k])} />{t(`rej.kind.${k}`)}
-                    </p>
-                    {group.map((r) => (
-                      <button key={r.id} type="button" role="radio" aria-checked={reasonCode === r.code} onClick={() => setReasonCode(r.code)}
-                        className={cn("flex items-start gap-3 rounded-lg border p-3 text-left transition-colors",
-                          reasonCode === r.code ? "border-destructive bg-destructive/10" : "bg-muted/30 hover:border-destructive/50")}>
-                        <span className={cn("mt-0.5 h-4 w-4 shrink-0 rounded-full border-2", reasonCode === r.code ? "border-destructive bg-destructive" : "border-muted-foreground")} />
-                        <span className="min-w-0">
-                          <span className="block text-sm font-medium">{L.tl(`rej.code.${r.code}`, r.label)}{r.is_custom && <span className="ml-1.5 text-xs text-muted-foreground">{t("pmap.val.custom")}</span>}</span>
-                          {r.description && r.description !== r.label && t(`rej.code.${r.code}`) === `rej.code.${r.code}` && <span className="block text-xs text-muted-foreground">{r.description}</span>}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )
-              })}
-            </div>
-            {addingReason && (
-              <div className="flex flex-wrap gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
-                <Input className="h-8 min-w-40 flex-1 text-sm" placeholder={t("pmap.val.reasonLabelPlaceholder")} value={newReasonLabel} onChange={(e) => setNewReasonLabel(e.target.value)} />
-                <Select value={newReasonKind} onValueChange={(v) => setNewReasonKind(v as RejectionKind)}>
-                  <SelectTrigger className="h-8 w-full text-xs sm:w-56" aria-label={t("rej.kind.label")}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {REJECTION_KINDS.map((k) => <SelectItem key={k} value={k} className="text-xs">{t(`rej.kind.${k}`)}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Button size="sm" className="h-8" disabled={busy || !newReasonLabel.trim()} onClick={addReason}>{t("pmap.val.saveSelect")}</Button>
-                <Button size="sm" variant="ghost" className="h-8" onClick={() => setAddingReason(false)}>{t("common.cancel")}</Button>
-              </div>
-            )}
-            <NoteField value={note} onChange={setNote} />
-            <div className="flex gap-2">
-              <Button variant="destructive" className="flex-1" disabled={busy || !reasonCode} onClick={reject}>
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}{t("pmap.val.confirmReject")}
-              </Button>
-              <Button variant="outline" className="flex-1" onClick={() => setMode("idle")}>{t("common.cancel")}</Button>
-            </div>
-          </section>
-        )}
 
         {status === "location_pending" && canEdit && mode !== "reject" && (
           <div className="flex justify-end">
